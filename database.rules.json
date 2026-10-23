@@ -1,0 +1,90 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "pendingRequests": {
+      "$targetUid": {
+        ".read": "auth != null && auth.uid == $targetUid",
+        "$guardianUid": {
+          ".read": "auth != null && (auth.uid == $targetUid || auth.uid == $guardianUid)",
+          ".write": "auth != null && (auth.uid == $targetUid || auth.uid == $guardianUid)"
+        }
+      }
+    },
+
+    "guardianSentRequests": {
+      "$guardianUid": {
+        ".read": "auth != null && auth.uid == $guardianUid",
+        ".write": "auth != null && auth.uid == $guardianUid"
+      }
+    },
+
+    "connectionRequests": {
+      "$targetUid": {
+        ".read": "auth != null && auth.uid == $targetUid",
+        "$guardianUid": {
+          ".read": "auth != null && (auth.uid == $targetUid || auth.uid == $guardianUid)",
+          ".write": "auth != null && (auth.uid == $targetUid || auth.uid == $guardianUid)"
+        }
+      }
+    },
+
+    "guardianLinks": {
+      "$guardianUid": {
+        ".read": "auth != null && auth.uid == $guardianUid",
+        "$targetUid": {
+          ".read": "auth != null && (auth.uid == $guardianUid || auth.uid == $targetUid)",
+          ".write": "auth != null && (auth.uid == $guardianUid || auth.uid == $targetUid)"
+        }
+      }
+    },
+
+    "pairCodes": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    "profiles": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid",
+        "pairedUser": {
+          ".write": "auth != null"
+        },
+        "pairedGuardian": {
+          ".write": "auth != null && auth.uid == $uid"
+        }
+      }
+    },
+
+    "users": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $uid",
+        "pairedUser": {
+          ".write": "auth != null"
+        },
+        "pairedGuardian": {
+          ".write": "auth != null && auth.uid == $uid"
+        }
+      }
+    },
+
+    "usersByEmail": {
+      "$emailKey": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    "usersById": {
+      "$userId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}
