@@ -1,4 +1,5 @@
 export type WebExperienceProps = {
+  backendError?: string;
   isDemo: boolean;
   hasLocation: boolean;
   onRequestLocation: () => void;

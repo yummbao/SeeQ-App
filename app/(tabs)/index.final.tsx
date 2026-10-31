@@ -11,10 +11,10 @@ import { AppAlert as Alert } from '@/lib/app-alert';
 import { AppSpeech as Speech } from '@/lib/app-speech';
 import { HAZARD_LABEL } from '@/lib/hazard-protocol';
 import { isHazardAudioActive } from '@/lib/speech-priority';
-import { getApps, initializeApp } from 'firebase/app';
+import { createSeeqBackend } from '@/lib/backend';
 import {
     createUserWithEmailAndPassword,
-    getAuth,
+
     onAuthStateChanged,
     sendEmailVerification,
     sendPasswordResetEmail,
@@ -22,7 +22,7 @@ import {
     signOut,
     updateProfile,
 } from 'firebase/auth';
-import { get, getDatabase, onValue, ref, remove, set, update } from 'firebase/database';
+import { get, onValue, ref, remove, set, update } from 'firebase/database';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -63,9 +63,11 @@ const firebaseConfig = {
   databaseURL: "https://seeq-a3251-default-rtdb.asia-southeast1.firebasedatabase.app/"
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const auth = getAuth(app);
-const db = getDatabase(app);
+const { auth, db, backendError } = createSeeqBackend(firebaseConfig);
+const requireBackend = () => {
+  if (backendError) { Alert.alert("전시용 서버 설정 필요", backendError); return false; }
+  return true;
+};
 const TMAP_APP_KEY = 'B4kEbjLGj99bPxMpMdfst5ZeOUsoIHLn6EtiN7mC';
 
 const MOVE_RECORD_DISTANCE_METERS = 5;
@@ -1829,6 +1831,7 @@ export default function SeeQFinalApp() {
 
 
   const handleEmailLogin = async () => {
+    if (!requireBackend()) return;
     const emailText = emailRef.current.trim();
     const passwordText = passwordRef.current;
 
@@ -1959,6 +1962,7 @@ try {
   };
 
   const handleEmailSignup = async () => {
+    if (!requireBackend()) return;
     const nameText = signupNameRef.current.trim();
     const idText = signupIdRef.current.trim();
     const emailText = signupEmailRef.current.trim();
@@ -1968,6 +1972,10 @@ try {
     if (!nameText || !idText || !emailText || !passwordText.trim() || !confirmPasswordText.trim()) {
       Alert.alert('입력 필요', '이름, 아이디, 이메일, 비밀번호를 모두 입력해 주세요.');
       return;
+    }
+
+    if (Platform.OS === 'web' && /[.#$\[\]\/]/.test(idText)) {
+      Alert.alert('아이디 확인', '아이디에 . # $ [ ] / 문자를 사용할 수 없습니다.'); return;
     }
 
     if (passwordText.length < 6) {
@@ -2003,6 +2011,7 @@ let createdPairCode = null;
         if (createdPairCode) setMyPairCode(createdPairCode);
       } catch (profileError) {
         console.log('프로필 DB 저장 실패', profileError);
+        if (Platform.OS === 'web') { await signOut(auth); throw profileError; }
       }
 
       Alert.alert(
@@ -2068,6 +2077,7 @@ let createdPairCode = null;
 };
 
   const requireLogin = (nextScreen: string) => {
+    if (!requireBackend()) return;
     if (!currentUser) {
       Alert.alert('로그인 필요', '로그인 후 이용할 수 있습니다.');
       setCurrentScreen('login');
@@ -2206,7 +2216,9 @@ return;
 
 
   useEffect(() => {
+    if (backendError) return;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (Platform.OS === 'web' && user && !user.emailVerified) { setCurrentUser(null); return; }
       setCurrentUser(user);
 
       if (!user) {
@@ -2236,6 +2248,10 @@ return;
 const profile = profileSnapshot.val();
 
 console.log('🔥 profile', profile);
+        if (Platform.OS === 'web' && profile && user.emailVerified) {
+          setUserType(profile.type);
+          setCurrentScreen(profile.type === 'guardian' ? 'home' : 'route');
+        }
 
         if (profile?.pairCode) {
           setMyPairCode(profile.pairCode);
@@ -2625,6 +2641,13 @@ if (distance <= TURN_NOW_DISTANCE_METERS && stage < 2) {
 
 
   useEffect(() => {
+    if (Platform.OS !== 'web' || !currentUser || !isUser) return;
+    return onValue(ref(db, `users/${currentUser.uid}/status`), snapshot => {
+      setEmergencyStatus(!!snapshot.val()?.emergency);
+    });
+  }, [currentUser, isUser]);
+
+  useEffect(() => {
     if (!currentUser) return;
 
     const shareRef = ref(db, `users/${currentUser.uid}/shareLocation`);
@@ -2661,7 +2684,7 @@ if (distance <= TURN_NOW_DISTANCE_METERS && stage < 2) {
       }
 
       const targetSnapshot = await get(
-        ref(db, `users/${pairedUid}`)
+        ref(db, `${Platform.OS === 'web' ? 'profiles' : 'users'}/${pairedUid}`)
       );
 
       const target = targetSnapshot.val();
@@ -2713,7 +2736,7 @@ if (distance <= TURN_NOW_DISTANCE_METERS && stage < 2) {
 
       try {
         const [guardianUserSnapshot, guardianProfileSnapshot] = await Promise.all([
-          get(ref(db, `users/${guardianUid}`)),
+          get(ref(db, `${Platform.OS === 'web' ? 'profiles' : 'users'}/${guardianUid}`)),
           get(ref(db, `profiles/${guardianUid}`)),
         ]);
         const guardianUser = guardianUserSnapshot.val() || {};
@@ -3274,7 +3297,152 @@ return a.distance - b.distance;
       });
     };
 
+    const startGuardianTracking = () => {
+      // 3) 보호자 모드면 Firebase 실시간 수신
+      if (!isUser) {
+        const targetUid = selectedGuardianTarget?.uid || guardianTargets[0]?.uid;
+
+        if (!targetUid) {
+          setCanGuardianViewLocation(false);
+          setTargetLocation(null);
+          setMoveLogs(["연결된 관리 대상이 없습니다"]);
+          return;
+        }
+
+        const locationRef = ref(db, `users/${targetUid}/location`);
+        const shareRef = ref(db, `users/${targetUid}/shareLocation`);
+        const moveHistoryRef = ref(db, `users/${targetUid}/moveHistory`);
+
+        let isShared = false;
+        let isEmergency = false;
+        let latestLocationData: any = null;
+
+        const subscribeCoordinates = () => {
+        unsubscribeLocation = onValue(locationRef, async (snapshot) => {
+          const data = snapshot.val();
+
+          if (data) {
+            latestLocationData = data;
+
+            if (isShared || isEmergency) {
+              setTargetLocation(data);
+              const addressText = await getAddress(data.latitude, data.longitude, 'guardian');
+              pushGuardianLog(addressText);
+            } else {
+              setTargetLocation(null);
+            }
+          }
+        });
+
+        unsubscribeMoveHistory = onValue(moveHistoryRef, (snapshot) => {
+          const data = snapshot.val();
+
+          if (Array.isArray(data)) {
+            setMovementHistory(pruneMovementHistory(data));
+          } else {
+            setMovementHistory([]);
+          }
+        });
+
+        };
+
+        const updatePermission = () => {
+          const canView = isShared || isEmergency;
+          if (Platform.OS === 'web') {
+            if (canView && !unsubscribeLocation) subscribeCoordinates();
+            if (!canView) {
+              unsubscribeLocation?.(); unsubscribeLocation = null;
+              unsubscribeMoveHistory?.(); unsubscribeMoveHistory = null;
+              latestLocationData = null; setMovementHistory([]);
+            }
+          }
+          setCanGuardianViewLocation(canView);
+
+          if (!canView) {
+            setTargetLocation(null);
+            setMoveLogs(["시스템 연결 대기 중..."]); // ⭐ 추가
+          } else if (latestLocationData) {
+            setTargetLocation(latestLocationData);
+          }
+        };
+
+        const offShare = onValue(shareRef, (snapshot) => {
+          isShared = !!snapshot.val();
+          console.log("shareLocation:", isShared);
+          updatePermission();
+        });
+
+        if (Platform.OS !== 'web') subscribeCoordinates();
+
+        const statusRef = ref(db, `users/${targetUid}/status`);
+        const guardianAlertStartedAt = Date.now();
+        const offStatus = onValue(statusRef, async (snapshot) => {
+          const statusData = snapshot.val();
+          const previousEmergency = lastEmergencyStatusRef.current;
+          const firebaseEmergency = !!statusData?.emergency;
+          const emergencyTime = statusData?.timestamp
+            ? new Date(statusData.timestamp).getTime()
+            : 0;
+          const isNewEmergency = emergencyTime > guardianAlertStartedAt;
+
+          if (
+            Platform.OS !== 'web' &&
+            !hasLoadedEmergencyStatusRef.current &&
+            firebaseEmergency &&
+            !isNewEmergency
+          ) {
+            isEmergency = false;
+            setEmergencyStatus(false);
+            updatePermission();
+            lastEmergencyStatusRef.current = false;
+            hasLoadedEmergencyStatusRef.current = true;
+            set(statusRef, {
+              emergency: false,
+              timestamp: new Date().toISOString(),
+            }).catch(() => {
+              console.log('긴급 상태 초기화 실패');
+            });
+            return;
+          }
+
+          isEmergency = firebaseEmergency;
+
+          console.log("emergency:", isEmergency);
+
+          setEmergencyStatus(isEmergency);
+          updatePermission();
+
+          if (
+            hasLoadedEmergencyStatusRef.current &&
+            isEmergency &&
+            !previousEmergency &&
+            isNewEmergency
+          ) {
+            Alert.alert("🚨 긴급 상황", "사용자가 도움을 요청했습니다!");
+            Vibration.vibrate([0, 500, 200, 500]);
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: '긴급 위험 알림',
+                body: '사용자가 긴급 도움을 요청했습니다. 현재 위치를 확인하세요.',
+                sound: true,
+              },
+              trigger: null,
+            });
+          }
+
+          lastEmergencyStatusRef.current = isEmergency;
+          hasLoadedEmergencyStatusRef.current = true;
+        });
+
+        unsubscribeStatus = () => {
+          offShare();
+          offStatus();
+        };
+      }
+    };
+
     const startLocationTracking = async () => {
+      if (Platform.OS === 'web' && !isUser) { startGuardianTracking(); return; }
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert("권한 필요", "위치 권한을 허용해야 실시간 기능이 작동합니다.");
@@ -3387,133 +3555,7 @@ return a.distance - b.distance;
         }
       );
 
-      // 3) 보호자 모드면 Firebase 실시간 수신
-      if (!isUser) {
-        const targetUid = selectedGuardianTarget?.uid || guardianTargets[0]?.uid;
-
-        if (!targetUid) {
-          setCanGuardianViewLocation(false);
-          setTargetLocation(null);
-          setMoveLogs(["연결된 관리 대상이 없습니다"]);
-          return;
-        }
-
-        const locationRef = ref(db, `users/${targetUid}/location`);
-        const shareRef = ref(db, `users/${targetUid}/shareLocation`);
-        const moveHistoryRef = ref(db, `users/${targetUid}/moveHistory`);
-
-        let isShared = false;
-        let isEmergency = false;
-        let latestLocationData: any = null;
-
-        const updatePermission = () => {
-          const canView = isShared || isEmergency;
-          setCanGuardianViewLocation(canView);
-
-          if (!canView) {
-            setTargetLocation(null);
-            setMoveLogs(["시스템 연결 대기 중..."]); // ⭐ 추가
-          } else if (latestLocationData) {
-            setTargetLocation(latestLocationData);
-          }
-        };
-
-        const offShare = onValue(shareRef, (snapshot) => {
-          isShared = !!snapshot.val();
-          console.log("shareLocation:", isShared);
-          updatePermission();
-        });
-
-        unsubscribeLocation = onValue(locationRef, async (snapshot) => {
-          const data = snapshot.val();
-
-          if (data) {
-            latestLocationData = data;
-
-            if (isShared || isEmergency) {
-              setTargetLocation(data);
-              const addressText = await getAddress(data.latitude, data.longitude, 'guardian');
-              pushGuardianLog(addressText);
-            } else {
-              setTargetLocation(null);
-            }
-          }
-        });
-
-        unsubscribeMoveHistory = onValue(moveHistoryRef, (snapshot) => {
-          const data = snapshot.val();
-
-          if (Array.isArray(data)) {
-            setMovementHistory(pruneMovementHistory(data));
-          } else {
-            setMovementHistory([]);
-          }
-        });
-
-        const statusRef = ref(db, `users/${targetUid}/status`);
-        const guardianAlertStartedAt = Date.now();
-        const offStatus = onValue(statusRef, async (snapshot) => {
-          const statusData = snapshot.val();
-          const previousEmergency = lastEmergencyStatusRef.current;
-          const firebaseEmergency = !!statusData?.emergency;
-          const emergencyTime = statusData?.timestamp
-            ? new Date(statusData.timestamp).getTime()
-            : 0;
-          const isNewEmergency = emergencyTime > guardianAlertStartedAt;
-
-          if (
-            !hasLoadedEmergencyStatusRef.current &&
-            firebaseEmergency &&
-            !isNewEmergency
-          ) {
-            isEmergency = false;
-            setEmergencyStatus(false);
-            updatePermission();
-            lastEmergencyStatusRef.current = false;
-            hasLoadedEmergencyStatusRef.current = true;
-            set(statusRef, {
-              emergency: false,
-              timestamp: new Date().toISOString(),
-            }).catch(() => {
-              console.log('긴급 상태 초기화 실패');
-            });
-            return;
-          }
-
-          isEmergency = firebaseEmergency;
-
-          console.log("emergency:", isEmergency);
-
-          setEmergencyStatus(isEmergency);
-          updatePermission();
-
-          if (
-            hasLoadedEmergencyStatusRef.current &&
-            isEmergency &&
-            !previousEmergency &&
-            isNewEmergency
-          ) {
-            Alert.alert("🚨 긴급 상황", "사용자가 도움을 요청했습니다!");
-            Vibration.vibrate([0, 500, 200, 500]);
-            await Notifications.scheduleNotificationAsync({
-              content: {
-                title: '긴급 위험 알림',
-                body: '사용자가 긴급 도움을 요청했습니다. 현재 위치를 확인하세요.',
-                sound: true,
-              },
-              trigger: null,
-            });
-          }
-
-          lastEmergencyStatusRef.current = isEmergency;
-          hasLoadedEmergencyStatusRef.current = true;
-        });
-
-        unsubscribeStatus = () => {
-          offShare();
-          offStatus();
-        };
-      }
+      startGuardianTracking();
     };
 
     startLocationTracking().catch(error => console.warn('[SeeQ] 위치 추적 시작 실패', error));
@@ -4189,6 +4231,7 @@ return a.distance - b.distance;
                   speechLabel={"비밀번호 찾기"}
   onPress={async () => {
 
+    if (!requireBackend()) return;
     const emailText = emailRef.current.trim();
 
     if (!emailText) {
@@ -5000,6 +5043,24 @@ return a.distance - b.distance;
   isUser
     ? async () => {
 
+        if (Platform.OS === 'web') {
+          if (!requireBackend()) return;
+          if (!currentUser) { requireLogin('home'); return; }
+          if (!emergencyStatus && !sosConfirmMode) {
+            setSosConfirmMode(true); Speech.speak('긴급 도움 요청. 다시 누르면 전송');
+            setTimeout(() => setSosConfirmMode(false), 4000); return;
+          }
+          const next = !emergencyStatus;
+          setSosConfirmMode(false);
+          try {
+            if (next && myLocation?.coords) await set(ref(db, `users/${currentUser.uid}/location`), { latitude: myLocation.coords.latitude, longitude: myLocation.coords.longitude, timestamp: new Date().toISOString() });
+            await set(ref(db, `users/${currentUser.uid}/status`), { emergency: next, timestamp: new Date().toISOString() });
+            setEmergencyStatus(next);
+            Speech.speak(next ? '전시용 서버에 도움 요청을 저장했습니다' : '도움 요청을 해제했습니다');
+            if (next && !myLocation?.coords) Alert.alert('위치 미포함', '도움 요청은 저장했지만 실제 위치 권한이 없어 현재 좌표는 보내지 못했습니다.');
+          } catch { Alert.alert('전송 실패', '도움 요청을 저장하지 못했습니다. 연결과 Firebase 권한을 확인해 주세요.'); }
+          return;
+        }
         // 이미 SOS 활성화 상태면 해제
         if (emergencyStatus) {
 
@@ -5209,7 +5270,7 @@ return a.distance - b.distance;
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      {Platform.OS === 'web' && <WebExperienceBar isDemo={!!webDemoOrigin && !myLocation?.coords} hasLocation={!!myLocation?.coords} onRequestLocation={requestWebLocation} onHazardSettings={() => setCurrentScreen('hazardSettings')} />}
+      {Platform.OS === 'web' && <WebExperienceBar backendError={backendError} isDemo={!!webDemoOrigin && !myLocation?.coords} hasLocation={!!myLocation?.coords} onRequestLocation={requestWebLocation} onHazardSettings={() => setCurrentScreen('hazardSettings')} />}
       {currentScreen === 'hazardSettings' && <HazardConnectionScreen controller={hazardAlerts} onBack={() => setCurrentScreen('home')} />}
       {currentScreen === 'login' && LoginView()}
       {currentScreen === 'signup' && SignupView()}

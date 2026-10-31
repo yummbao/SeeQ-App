@@ -8,7 +8,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "web:build": "expo export --platform web",
+    "web:preflight": "node scripts/exhibition-preflight.cjs",
+    "test:web": "node --test tests/web-compatibility.test.cjs tests/exhibition.test.cjs tests/hazard-alerts.test.cjs tests/button-speech.test.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

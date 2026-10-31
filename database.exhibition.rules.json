@@ -1,0 +1,94 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "profiles": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid || (auth != null && root.child('users').child($uid).child('pairedGuardian').val() == auth.uid) || (auth != null && root.child('users').child($uid).child('pairedUser').val() == auth.uid)",
+        ".write": "auth != null && auth.uid == $uid",
+        "pairedUser": {
+          ".write": "auth != null && ((newData.val() == auth.uid && root.child('pendingRequests').child(auth.uid).child($uid).child('status').val() == 'pending' && (!data.exists() || data.val() == auth.uid)) || (!newData.exists() && data.val() == auth.uid))"
+        },
+        "pairedGuardian": {
+          ".write": "auth != null && auth.uid == $uid || ((auth != null && root.child('users').child($uid).child('pairedGuardian').val() == auth.uid) && !newData.exists())"
+        }
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid",
+        "pairedUser": {
+          ".write": "auth != null && ((newData.val() == auth.uid && root.child('pendingRequests').child(auth.uid).child($uid).child('status').val() == 'pending' && (!data.exists() || data.val() == auth.uid)) || (!newData.exists() && data.val() == auth.uid))"
+        },
+        "pairedGuardian": {
+          ".write": "auth != null && auth.uid == $uid || ((auth != null && root.child('users').child($uid).child('pairedGuardian').val() == auth.uid) && !newData.exists())"
+        },
+        "shareLocation": {
+          ".read": "auth != null && root.child('users').child($uid).child('pairedGuardian').val() == auth.uid"
+        },
+        "status": {
+          ".read": "auth != null && root.child('users').child($uid).child('pairedGuardian').val() == auth.uid"
+        },
+        "location": {
+          ".read": "(auth != null && root.child('users').child($uid).child('pairedGuardian').val() == auth.uid) && (root.child('users').child($uid).child('shareLocation').val() == true || root.child('users').child($uid).child('status/emergency').val() == true)"
+        },
+        "moveHistory": {
+          ".read": "(auth != null && root.child('users').child($uid).child('pairedGuardian').val() == auth.uid) && (root.child('users').child($uid).child('shareLocation').val() == true || root.child('users').child($uid).child('status/emergency').val() == true)"
+        }
+      }
+    },
+    "pendingRequests": {
+      "$targetUid": {
+        ".read": "auth != null && auth.uid == $targetUid",
+        "$guardianUid": {
+          ".read": "auth != null && (auth.uid == $targetUid || auth.uid == $guardianUid)",
+          ".write": "auth != null && (auth.uid == $targetUid || (auth.uid == $guardianUid && newData.child('guardianUid').val() == auth.uid && newData.child('status').val() == 'pending'))"
+        }
+      }
+    },
+    "connectionRequests": {
+      "$targetUid": {
+        ".read": "auth != null && auth.uid == $targetUid",
+        "$guardianUid": {
+          ".read": "auth != null && (auth.uid == $targetUid || auth.uid == $guardianUid)",
+          ".write": "auth != null && (auth.uid == $targetUid || (auth.uid == $guardianUid && newData.child('guardianUid').val() == auth.uid && newData.child('status').val() == 'pending'))"
+        }
+      }
+    },
+    "guardianSentRequests": {
+      "$guardianUid": {
+        ".read": "auth != null && auth.uid == $guardianUid",
+        "$targetUid": {
+          ".write": "auth != null && (auth.uid == $targetUid || auth.uid == $guardianUid)"
+        }
+      }
+    },
+    "guardianLinks": {
+      "$guardianUid": {
+        ".read": "auth != null && auth.uid == $guardianUid",
+        "$targetUid": {
+          ".write": "auth != null && (auth.uid == $targetUid || auth.uid == $guardianUid)"
+        }
+      }
+    },
+    "pairCodes": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((!newData.exists() && data.val() == auth.uid) || (newData.val() == auth.uid && (!data.exists() || data.val() == auth.uid)))"
+      }
+    },
+    "usersByEmail": {
+      "$key": {
+        ".read": "auth != null",
+        ".write": "auth != null && newData.child('uid').val() == auth.uid && (!data.exists() || data.child('uid').val() == auth.uid)"
+      }
+    },
+    "usersById": {
+      "$key": {
+        ".read": "auth != null",
+        ".write": "auth != null && newData.child('uid').val() == auth.uid && (!data.exists() || data.child('uid').val() == auth.uid)"
+      }
+    }
+  }
+}

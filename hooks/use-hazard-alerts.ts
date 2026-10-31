@@ -1,3 +1,4 @@
+import { prepareHazardAudio, playWebHazardTone, cancelWebHazardTone } from '@/lib/web-hazard-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import * as ExpoSpeech from 'expo-speech';
@@ -41,6 +42,7 @@ export function useHazardAlerts(options: { allowed: boolean; onResumeGuidance: (
   useEffect(() => { resumeRef.current = options.onResumeGuidance; }, [options.onResumeGuidance]);
 
   const cancelOutput = useCallback(() => {
+    if (Platform.OS === 'web') cancelWebHazardTone();
     runId.current += 1;
     speechBusy.current = false;
     if (toneWait.current) {
@@ -94,6 +96,9 @@ export function useHazardAlerts(options: { allowed: boolean; onResumeGuidance: (
       }
       if (signal.event !== 'GO') {
         try {
+          if (Platform.OS === 'web') {
+            await playWebHazardTone(signal.event === 'LEVEL1');
+          } else {
           await setAudioModeAsync({ playsInSilentMode: true, interruptionMode: 'duckOthers', shouldPlayInBackground: false });
           if (!isCurrent()) return;
           const source = signal.event === 'LEVEL1'
@@ -117,6 +122,7 @@ export function useHazardAlerts(options: { allowed: boolean; onResumeGuidance: (
           if (!isCurrent()) return;
           sound.remove();
           player.current = null;
+          }
         } catch {
           if (isCurrent()) setError('경고음을 재생하지 못해 음성 안내로 대신합니다. 기기 음량을 확인해 주세요.');
           if (!isCurrent()) return;
@@ -160,8 +166,9 @@ export function useHazardAlerts(options: { allowed: boolean; onResumeGuidance: (
   useEffect(() => {
     let disposed = false;
     AsyncStorage.getItem(STORAGE_KEY).then(value => {
-      if (!disposed && value) {
-        try { setEndpoint(normalizeHazardUrl(value)); } catch { setError('저장된 서버 주소를 다시 입력해 주세요.'); }
+      const saved = value || (Platform.OS === 'web' ? process.env.EXPO_PUBLIC_EXHIBITION_HAZARD_WS_URL : '');
+      if (!disposed && saved) {
+        try { setEndpoint(normalizeHazardUrl(saved)); } catch { setError('저장된 서버 주소를 다시 입력해 주세요.'); }
       }
     }).catch(() => { if (!disposed) setError('서버 주소를 불러오지 못했습니다.'); })
       .finally(() => { if (!disposed) setHydrated(true); });
@@ -191,6 +198,7 @@ export function useHazardAlerts(options: { allowed: boolean; onResumeGuidance: (
   }, [cancelOutput]);
 
   const connect = useCallback((value: string) => {
+    if (Platform.OS === 'web') void prepareHazardAudio().catch(error => setError(String(error.message)));
     try {
       const url = normalizeHazardUrl(value);
       setError(''); setEndpoint(url); setEnabled(true); setGeneration(n => n + 1);
@@ -214,6 +222,10 @@ export function useHazardAlerts(options: { allowed: boolean; onResumeGuidance: (
     endpoint, enabled, setEnabled: changeEnabled, status, error, warning, lastSignal, connect,
     dismiss: () => dismiss(),
     test: (event: HazardType) => {
+      if (Platform.OS === 'web') void prepareHazardAudio().then(() => {
+        if (enabled) receive({ event, message: TEST_MESSAGES[event], ttc: event === 'LEVEL1' ? 1.2 : null, timestamp: Date.now() / 1000 }, true);
+      }).catch(error => setError(String(error.message)));
+      if (Platform.OS === 'web') return;
       if (!enabled) { setError('주변 인식을 켠 뒤 테스트해 주세요.'); return; }
       receive({ event, message: TEST_MESSAGES[event], ttc: event === 'LEVEL1' ? 1.2 : null, timestamp: Date.now() / 1000 }, true);
     },
