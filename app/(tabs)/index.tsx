@@ -5,6 +5,10 @@ import * as Notifications from 'expo-notifications';
 import { Magnetometer } from 'expo-sensors';
 import * as ExpoSpeech from 'expo-speech';
 //import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
+import { HazardConnectionScreen } from '@/components/hazard-connection-screen';
+import { useHazardAlerts } from '@/hooks/use-hazard-alerts';
+import { HAZARD_LABEL } from '@/lib/hazard-protocol';
+import { isHazardAudioActive } from '@/lib/speech-priority';
 import { getApps, initializeApp } from 'firebase/app';
 import {
   createUserWithEmailAndPassword,
@@ -37,10 +41,6 @@ import {
   View
 } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
-import { HazardConnectionScreen } from '@/components/hazard-connection-screen';
-import { useHazardAlerts } from '@/hooks/use-hazard-alerts';
-import { HAZARD_LABEL } from '@/lib/hazard-protocol';
-import { isHazardAudioActive } from '@/lib/speech-priority';
 
 
 Notifications.setNotificationHandler({
