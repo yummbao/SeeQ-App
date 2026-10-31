@@ -1,0 +1,2607 @@
+﻿import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
+import { Magnetometer } from 'expo-sensors';
+import * as Speech from 'expo-speech';
+//import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
+import { getApps, initializeApp } from 'firebase/app';
+import { getDatabase, onValue, ref, set } from 'firebase/database';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, Vibration, View } from 'react-native';
+import MapView, { Marker, Polyline } from 'react-native-maps';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+// 🔥 Firebase 설정
+const firebaseConfig = {
+  apiKey: "AIzaSyAD7B0bkmHBiYsOG-FXGXstdoda9b6WTYA",
+  authDomain: "seeq-a3251.firebaseapp.com",
+  projectId: "seeq-a3251",
+  storageBucket: "seeq-a3251.firebasestorage.app",
+  messagingSenderId: "190227872860",
+  appId: "1:190227872860:web:b679c47b03995910dffa99",
+  databaseURL: "https://seeq-a3251-default-rtdb.asia-southeast1.firebasedatabase.app/"
+};
+
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const db = getDatabase(app);
+const TMAP_APP_KEY = 'B4kEbjLGj99bPxMpMdfst5ZeOUsoIHLn6EtiN7mC';
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#000' },
+  inner: { flex: 1, justifyContent: 'center', paddingHorizontal: 25 },
+  logoContainer: { alignItems: 'center', marginBottom: 40 },
+  logoText: { color: 'white', fontSize: 68, fontWeight: '900' },
+  logoTextSmall: { color: 'white', fontSize: 32, fontWeight: '900' },
+  subText: { color: '#888', fontSize: 18, fontWeight: '600', marginTop: 5 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 25, paddingTop: 60, paddingBottom: 15 },
+  headerTitle: { color: 'white', fontSize: 20, fontWeight: '800' },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 10 },
+  typeSelector: { flexDirection: 'row', backgroundColor: '#111', borderRadius: 20, padding: 6, marginBottom: 25 },
+  typeButton: { flex: 1, height: 55, justifyContent: 'center', alignItems: 'center', borderRadius: 15 },
+  typeButtonText: { color: '#666', fontSize: 18, fontWeight: '700' },
+  inputContainer: { marginBottom: 15 },
+  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 20, marginBottom: 15, paddingHorizontal: 20, height: 75 },
+  input: { flex: 1, color: 'white', fontSize: 20, marginLeft: 15 },
+  loginHelperContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 30 },
+  helperText: { color: '#666', fontSize: 15, fontWeight: '500' },
+  helperDivider: { color: '#222', marginHorizontal: 20 },
+  loginButton: { height: 75, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  loginButtonText: { color: 'black', fontSize: 24, fontWeight: '800' },
+  mainCard: { borderRadius: 35, height: 220, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  mainCardTitle: { color: 'black', fontSize: 28, fontWeight: 'bold', marginTop: 10 },
+  grid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+  subCard: { backgroundColor: '#111', width: '48%', height: 160, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
+  subCardTitle: { color: 'white', fontSize: 20, fontWeight: 'bold', marginTop: 8 },
+  emergencyButton: { backgroundColor: '#FF3B30', flexDirection: 'row', height: 85, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
+  emergencyText: { color: 'white', fontSize: 22, fontWeight: 'bold', marginLeft: 10 },
+  emergencyBanner: { backgroundColor: '#FF3B30', padding: 15, paddingTop: 50, alignItems: 'center' },
+  emergencyBannerText: { color: 'white', fontWeight: 'bold' },
+  mapSection: { height: '60%' },
+  userMarker: { padding: 10, borderRadius: 25, borderWidth: 3, borderColor: 'black' },
+  logSection: { flex: 1, backgroundColor: '#050505', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, marginTop: -25 },
+  logTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
+  logItem: { paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#111' },
+  logTextItem: { color: '#555', fontSize: 15 },
+  locationShareButton: {
+  width: '100%',
+  minHeight: 82,
+  backgroundColor: '#1A1A1A',
+  borderRadius: 22,
+  paddingVertical: 18,
+  paddingHorizontal: 20,
+  marginTop: 12,
+  marginBottom: 8,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  borderWidth: 1,
+  borderColor: '#333',
+},
+
+locationShareButtonOn: {
+  borderColor: '#D2FF00',
+  backgroundColor: '#202600',
+},
+
+locationShareLeft: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 14,
+  flex: 1,
+},
+
+locationShareTitle: {
+  color: '#FFFFFF',
+  fontSize: 17,
+  fontWeight: '800',
+},
+
+locationShareDesc: {
+  color: '#AAAAAA',
+  fontSize: 12,
+  marginTop: 5,
+},
+
+shareStatusLight: {
+  width: 14,
+  height: 14,
+  borderRadius: 7,
+  backgroundColor: '#555',
+  marginLeft: 12,
+},
+
+shareStatusLightOn: {
+  backgroundColor: '#D2FF00',
+},
+  hazardOverlay: {
+    position: 'absolute',
+    top: 50,
+    left: 15,
+    right: 15,
+    backgroundColor: '#D2FF00',
+    zIndex: 9999,
+    borderRadius: 15,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  hazardText: {
+    color: 'black',
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 12,
+    flex: 1,
+  },
+  fullCard: {
+  backgroundColor: '#111',
+  width: '100%',
+  height: 100,
+  borderRadius: 28,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginBottom: 20,
+},
+
+emergencySubText: {
+  color: 'white',
+  fontSize: 13,
+  fontWeight: '500',
+  marginLeft: 10,
+  marginTop: 4,
+},
+});
+
+type RouteViewProps = {
+  routeCoords: any[];
+  myLocation: any;
+  themeColor: string;
+  heading: number;
+  userAddress: string;
+  destination: string;
+  setDestination: (text: string) => void;
+  setCurrentScreen: (screen: string) => void;
+  getRoute: (
+    startLat: number,
+    startLon: number,
+    endLat: number,
+    endLon: number
+  ) => Promise<any>;
+  searchPlace: (keyword: string, page?: number) => Promise<any>;
+  setRouteCoords: React.Dispatch<React.SetStateAction<any[]>>;
+  setGuidePoints: React.Dispatch<React.SetStateAction<any[]>>;
+  setCurrentGuideIndex: React.Dispatch<React.SetStateAction<number>>;
+  guidePoints: any[];
+  currentGuideIndex: number;
+  searchResults: any[];
+  setSearchResults: React.Dispatch<React.SetStateAction<any[]>>;
+  searchPage: number;
+  setSearchPage: React.Dispatch<React.SetStateAction<number>>;
+  hasMoreResults: boolean;
+  setHasMoreResults: React.Dispatch<React.SetStateAction<boolean>>;
+  recentPlaces: any[];
+  setRecentPlaces: React.Dispatch<React.SetStateAction<any[]>>;
+  favorites: any[];
+  setFavorites: React.Dispatch<React.SetStateAction<any[]>>;
+  mapRef: React.RefObject<MapView | null>;
+  isListening: boolean;
+  startVoiceRecognition: () => void;
+};
+
+
+function RouteView({
+  routeCoords,
+  myLocation,
+  themeColor,
+  heading,
+  userAddress,
+  destination,
+  setDestination,
+  setCurrentScreen,
+  getRoute,
+  searchPlace,
+  setRouteCoords,
+  setGuidePoints,
+  setCurrentGuideIndex,
+  guidePoints,
+  currentGuideIndex,
+  searchResults,
+  setSearchResults,
+  searchPage,
+  setSearchPage,
+  hasMoreResults,
+  setHasMoreResults,
+  recentPlaces,
+  setRecentPlaces,
+  favorites,
+  setFavorites,
+  mapRef,
+  isListening,
+  startVoiceRecognition,
+}: RouteViewProps) {
+  const displayCoords = myLocation?.coords;
+
+  if (!displayCoords) {
+    return <Text style={{ color: 'white', textAlign: 'center' }}>위치 정보 없음</Text>;
+  }
+  const formatDistance = (distance: number) => {
+    if (distance < 1000) return `${Math.round(distance)}미터`;
+    return `${(distance / 1000).toFixed(1)}킬로미터`;
+  };
+  useEffect(() => {
+    if (!myLocation?.coords || !mapRef.current) return;
+
+    mapRef.current.animateToRegion(
+      {
+        latitude: myLocation.coords.latitude,
+        longitude: myLocation.coords.longitude,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      },
+      500
+    );
+  }, [myLocation]);
+
+  const loadMorePlaces = async () => {
+    if (!hasMoreResults || !destination.trim()) return;
+
+    const nextPage = searchPage + 1;
+    const newPlaces = await searchPlace(destination, nextPage);
+
+    if (!newPlaces.length) {
+      setHasMoreResults(false);
+      return;
+    }
+
+    setSearchResults(prev => {
+      const merged = [...prev, ...newPlaces];
+
+      const unique = merged.filter(
+        (item, index, self) =>
+          index ===
+          self.findIndex(
+            x =>
+              x.name === item.name &&
+              x.latitude === item.latitude &&
+              x.longitude === item.longitude
+          )
+      );
+
+      return unique.sort((a: any, b: any) => a.distance - b.distance);
+    });
+
+    setSearchPage(nextPage);
+  };
+
+  const isAddressKeyword = (text: string) => {
+
+    const keyword = text.replace(/\s/g, '');
+
+    return (
+      /\d/.test(keyword) ||
+      keyword.includes('로') ||
+      keyword.includes('길') ||
+      keyword.includes('번길') ||
+      keyword.includes('동') ||
+      keyword.includes('가') ||
+      keyword.includes('리') ||
+      keyword.includes('읍') ||
+      keyword.includes('면')
+    );
+  };
+  const sortPlacesByRelevance = (places: any[], searchText: string) => {
+  const searchKeyword = searchText.trim().replace(/\s/g, '');
+
+  const getScore = (place: any) => {
+    const name = (place.name || '').replace(/\s/g, '');
+    const address = (place.fullAddress || '').replace(/\s/g, '');
+
+    // 1. 이름이 검색어와 완전 일치
+    if (name === searchKeyword) return 0;
+
+    // 2. 이름이 검색어로 시작
+    if (name.startsWith(searchKeyword)) return 1;
+
+    // 3. 이름에 검색어 포함
+    if (name.includes(searchKeyword)) return 2;
+
+    // 4. 주소에 검색어 포함
+    if (address.includes(searchKeyword)) return 3;
+
+    // 5. 나머지
+    return 10;
+  };
+
+  return places.sort((a, b) => {
+    const scoreA = getScore(a);
+    const scoreB = getScore(b);
+
+    if (scoreA !== scoreB) {
+      return scoreA - scoreB;
+    }
+
+    return a.distance - b.distance;
+  });
+};
+
+const handleSearch = async () => {
+  if (!destination.trim()) {
+    Alert.alert('알림', '목적지를 입력하세요.');
+    return;
+  }
+
+  Keyboard.dismiss();
+
+  setRouteCoords([]);
+  setGuidePoints([]);
+  setCurrentGuideIndex(0);
+
+  // ⭐ 1페이지만 말고 1~3페이지까지 먼저 가져오기
+  const pages = await Promise.all([
+    searchPlace(destination, 1),
+    searchPlace(destination, 2),
+    searchPlace(destination, 3),
+  ]);
+
+  const merged = pages.flat();
+
+  const unique = merged.filter(
+    (item, index, self) =>
+      index ===
+      self.findIndex(
+        x =>
+          x.name === item.name &&
+          x.latitude === item.latitude &&
+          x.longitude === item.longitude
+      )
+  );
+
+  const sorted = sortPlacesByRelevance(unique, destination);
+
+  const isStationSearch =
+  destination.includes('역') ||
+  destination.includes('전철') ||
+  destination.includes('지하철');
+
+let finalResults = sorted;
+
+if (isStationSearch) {
+  const stationResults = sorted.filter((p: any) => {
+    const name = p.name || '';
+
+    return (
+      name.includes('역') ||
+      name.includes('호선') ||
+      name.includes('출구')
+    );
+  });
+
+  const others = sorted.filter((p: any) => {
+    const name = p.name || '';
+
+    return !(
+      name.includes('역') ||
+      name.includes('호선') ||
+      name.includes('출구')
+    );
+  });
+
+  finalResults = [...stationResults, ...others];
+}
+
+  if (!sorted.length) {
+    Alert.alert('검색 실패', '목적지를 찾을 수 없습니다.');
+    return;
+  }
+
+setSearchResults(finalResults);  setSearchPage(3);
+  setHasMoreResults(sorted.length >= 60);
+};
+
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [isRouteMapMode, setIsRouteMapMode] = useState(false);
+  const [isRecentHistoryMode, setIsRecentHistoryMode] = useState(false);
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.container}>
+          {/* 검색 모드 */}
+          {isSearchMode ? (
+            <View style={{ flex: 1, paddingTop: 55 }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 20,
+                  marginBottom: 18,
+                }}
+              >
+                <TouchableOpacity
+                  onPress={() => {
+                    setIsSearchMode(false);
+                    setSearchResults([]);
+                  }}
+                  style={{ marginRight: 12 }}
+                >
+                  <Ionicons name="chevron-back" size={30} color="white" />
+                </TouchableOpacity>
+
+                <View
+                  style={{
+                    flex: 1,
+                    height: 58,
+                    backgroundColor: '#1A1A1A',
+                    borderRadius: 30,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 18,
+                  }}
+                >
+                  <Ionicons
+                    name="search"
+                    size={22}
+                    color="#aaa"
+                  />
+
+                  <TextInput
+                    style={{
+                      flex: 1,
+                      color: 'white',
+                      fontSize: 22,
+                      marginLeft: 12,
+                    }}
+                    placeholder="목적지 검색"
+                    placeholderTextColor="#777"
+                    value={destination}
+                    onChangeText={setDestination}
+                    autoFocus
+                    returnKeyType="search"
+                    onSubmitEditing={handleSearch}
+                  />
+
+                  {/* 🎤 음성 검색 */}
+                  <TouchableOpacity
+                    onPress={startVoiceRecognition}
+                    style={{ marginRight: 10 }}
+                  >
+                    <Ionicons
+                      name={isListening ? "mic" : "mic-outline"}
+                      size={26}
+                      color={isListening ? "#D2FF00" : "#aaa"}
+                    />
+                  </TouchableOpacity>
+
+                  {/* ❌ 검색어 삭제 */}
+                  <TouchableOpacity
+                    onPress={() => {
+                      setDestination('');
+                      setSearchResults([]);
+                    }}
+                  >
+                    <Ionicons
+                      name="close-circle"
+                      size={28}
+                      color="#ddd"
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              {searchResults.length === 0 ? (
+                <View style={{ flex: 1, paddingHorizontal: 20 }}>
+                  <Text style={{ color: '#888', fontSize: 16, marginBottom: 14 }}>
+                    검색어를 입력하면 결과가 아래에 표시됩니다.
+                  </Text>
+
+                  {favorites.length > 0 && (
+                    <>
+                      <Text
+                        style={{
+                          color: 'white',
+                          fontSize: 18,
+                          fontWeight: '700',
+                          marginBottom: 10,
+                        }}
+                      >
+                        ⭐ 즐겨찾기
+                      </Text>
+
+                      {favorites.slice(0, 5).map((place, index) => (
+                        <TouchableOpacity
+                          key={index}
+                          onPress={() => {
+                            setDestination(place.name);
+                            Speech.stop();
+                            Speech.speak(place.name, { language: 'ko-KR' });
+                          }}
+                          style={{
+                            backgroundColor: '#111',
+                            paddingVertical: 16,
+                            paddingHorizontal: 16,
+                            borderRadius: 14,
+                            marginBottom: 10,
+                          }}
+                        >
+                          <Text style={{ color: 'white', fontSize: 18, fontWeight: '700' }}>
+                            {place.name}
+                          </Text>
+                          <Text style={{ color: '#aaa', marginTop: 4, fontSize: 14 }}>
+                            {place.fullAddress || '주소 정보 없음'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </>
+                  )}
+                </View>
+              ) : (
+                <FlatList
+                  data={searchResults}
+                  keyExtractor={(_, index) => index.toString()}
+                  onEndReached={loadMorePlaces}
+                  onEndReachedThreshold={0.5}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 30 }}
+                  ListFooterComponent={
+                    hasMoreResults ? (
+                      <Text style={{ color: '#888', textAlign: 'center', paddingVertical: 12 }}>
+                        더 불러오는 중...
+                      </Text>
+                    ) : null
+                  }
+                  renderItem={({ item: place, index }) => {
+                    const isFavorite = favorites.some(
+                      p =>
+                        p.name === place.name &&
+                        p.latitude === place.latitude &&
+                        p.longitude === place.longitude
+                    );
+
+                    return (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingVertical: 18,
+                          borderBottomWidth: 1,
+                          borderBottomColor: '#222',
+                        }}
+                      >
+                        {/* 왼쪽: 즐겨찾기 */}
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (isFavorite) {
+                              setFavorites(prev =>
+                                prev.filter(
+                                  p =>
+                                    !(
+                                      p.name === place.name &&
+                                      p.latitude === place.latitude &&
+                                      p.longitude === place.longitude
+                                    )
+                                )
+                              );
+                              Speech.stop();
+                              Speech.speak('즐겨찾기에서 제거되었습니다', { language: 'ko-KR' });
+                            } else {
+                              setFavorites(prev => [place, ...prev]);
+                              Speech.stop();
+                              Speech.speak('즐겨찾기에 추가되었습니다', { language: 'ko-KR' });
+                            }
+                          }}
+                          style={{
+                            width: 52,
+                            height: 52,
+                            borderRadius: 26,
+                            backgroundColor: '#222',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            marginRight: 14,
+                          }}
+                        >
+                          <Ionicons
+                            name={isFavorite ? 'star' : 'star-outline'}
+                            size={26}
+                            color={isFavorite ? '#D2FF00' : '#bbb'}
+                          />
+                        </TouchableOpacity>
+
+                        {/* 가운데: 누르면 음성 읽기 */}
+                        <TouchableOpacity
+                          style={{ flex: 1, paddingRight: 12 }}
+                          onPress={() => {
+                            Speech.stop();
+
+                            const placeTitle = isAddressKeyword(destination)
+                              ? place.bldName || place.name || '장소 정보'
+                              : place.name;
+
+                            Speech.speak(
+                              `${index + 1}번, ${placeTitle}, ${formatDistance(place.distance)}`,
+                              { language: 'ko-KR' }
+                            );
+                          }}
+                        >
+                          <Text style={{ color: 'white', fontSize: 20, fontWeight: '700' }}>
+                            {isAddressKeyword(destination)
+                              ? place.bldName || place.name || '장소 정보'
+                              : place.name}
+                          </Text>
+
+                          <Text style={{ color: '#aaa', fontSize: 15, marginTop: 4 }}>
+                            {place.fullAddress || '주소 정보 없음'}
+                          </Text>
+
+                          <Text style={{ color: '#888', fontSize: 14, marginTop: 4 }}>
+                            {formatDistance(place.distance)}
+                          </Text>
+                        </TouchableOpacity>
+
+                        {/* 오른쪽: 길찾기만 */}
+                        <TouchableOpacity
+                          style={{
+                            backgroundColor: '#D2FF00',
+                            borderRadius: 12,
+                            paddingVertical: 12,
+                            paddingHorizontal: 14,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                          }}
+                          onPress={async () => {
+                            Speech.stop();
+
+                            const route = await getRoute(
+                              displayCoords.latitude,
+                              displayCoords.longitude,
+                              place.latitude,
+                              place.longitude
+                            );
+
+                            if (!route?.features) {
+                              Alert.alert('경로 실패', '길찾기 결과가 없습니다.');
+                              return;
+                            }
+
+                            let totalDistance = 0;
+                            let totalTime = 0;
+
+                            route.features.forEach((f: any) => {
+                              if (f.properties?.distance) totalDistance += f.properties.distance;
+                              if (f.properties?.time) totalTime += f.properties.time;
+                            });
+
+                            const minutes = Math.round(totalTime / 60);
+
+                            const coords = route.features
+                              .filter((item: any) => item.geometry?.type === 'LineString')
+                              .flatMap((item: any) =>
+                                item.geometry.coordinates.map((coord: number[]) => ({
+                                  latitude: coord[1],
+                                  longitude: coord[0],
+                                }))
+                              );
+
+                            setRouteCoords(coords);
+
+                            const points = route.features
+                              .filter(
+                                (item: any) =>
+                                  item.geometry?.type === 'Point' &&
+                                  item.properties?.description
+                              )
+                              .map((item: any) => ({
+                                latitude: item.geometry.coordinates[1],
+                                longitude: item.geometry.coordinates[0],
+                                description: item.properties.description,
+                              }));
+
+                            setGuidePoints(points);
+                            setCurrentGuideIndex(0);
+
+                            setRecentPlaces(prev => {
+                              const updated = [
+                                place,
+                                ...prev.filter(
+                                  p =>
+                                    !(
+                                      p.name === place.name &&
+                                      p.latitude === place.latitude &&
+                                      p.longitude === place.longitude
+                                    )
+                                ),
+                              ];
+                              return updated.slice(0, 5);
+                            });
+
+                            const placeTitle = isAddressKeyword(destination)
+                              ? place.bldName || place.name || '목적지'
+                              : place.name;
+
+                            Speech.speak(
+                              `${placeTitle}까지 ${formatDistance(totalDistance)}, 도보 ${minutes}분입니다. 길안내와 주변 인식을 시작합니다. `,
+                              { language: 'ko-KR' }
+                            );
+
+                            setIsSearchMode(false);
+                            setIsRouteMapMode(true);
+
+                            Speech.stop();
+                            Speech.speak(
+                                '길안내와 주변 인식을 시작합니다.',
+                              { language: 'ko-KR' }
+                            );
+
+                            if (coords.length > 0 && mapRef.current) {
+                              mapRef.current.fitToCoordinates(coords, {
+                                edgePadding: {
+                                  top: 80,
+                                  right: 50,
+                                  bottom: 80,
+                                  left: 50,
+                                },
+                                animated: true,
+                              });
+                            }
+                          }}
+                        >
+                          <Text style={{ color: 'black', fontWeight: '800', fontSize: 14 }}>
+                            길찾기
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  }}
+                />
+              )}
+            </View>
+          ) : isRouteMapMode ? (
+            <View style={{ flex: 1, backgroundColor: '#000' }}>
+         
+
+              <TouchableWithoutFeedback
+                onPress={() => {
+                  if (guidePoints[currentGuideIndex]) {
+                    Speech.stop();
+
+                    Speech.speak(
+`현재 방향은 ${
+  typeof heading === 'number'
+    ? ['북', '북동', '동', '남동', '남', '남서', '서', '북서'][
+        Math.round(heading / 45) % 8
+      ]
+    : '방향 확인 중'
+} 방향입니다. ${guidePoints[currentGuideIndex].description}`,                      {
+                        language: 'ko-KR',
+                      }
+                    );
+
+                    Vibration.vibrate(300);
+                  }
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <MapView
+                    ref={mapRef}
+                    style={{ flex: 1 }}
+                    showsUserLocation={true}
+                    initialRegion={{
+                      latitude: displayCoords.latitude,
+                      longitude: displayCoords.longitude,
+                      latitudeDelta: 0.08,
+                      longitudeDelta: 0.08,
+                    }}
+                  >
+                    {routeCoords.length > 0 && (
+                      <Polyline
+                        coordinates={routeCoords}
+                        strokeWidth={6}
+                        strokeColor="#3B82F6"
+                      />
+                    )}
+                  </MapView>
+                </View>
+              </TouchableWithoutFeedback>
+             <View
+  style={{
+    position: 'absolute',
+    top: 18,
+    left: 16,
+    right: 16,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 20,
+    padding: 16,
+  }}
+>
+  <TouchableOpacity
+    onPress={() => setIsRouteMapMode(false)}
+    style={{
+      position: 'absolute',
+      left: 14,
+      top: 14,
+      zIndex: 10,
+    }}
+  >
+    <Ionicons name="chevron-back" size={28} color="#D2FF00" />
+  </TouchableOpacity>
+
+  <Text
+    style={{
+      color: 'white',
+      fontSize: 16,
+      fontWeight: '700',
+      marginBottom: 6,
+      textAlign: 'center',
+    }}
+  >
+    도보 길찾기
+  </Text>
+
+                <Text
+                  style={{
+                    color: '#bbb',
+                    fontSize: 15,
+                    lineHeight: 22,
+                  }}
+                >
+                  {guidePoints[currentGuideIndex]?.description
+                    ? `다음 안내: ${guidePoints[currentGuideIndex].description}`
+                    : '목적지까지 경로가 지도에 표시됩니다.'}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: '#2563EB',
+                  paddingVertical: 18,
+                  alignItems: 'center',
+                }}
+                onPress={() => {
+                  if (!myLocation?.coords || !mapRef.current) return;
+
+                  mapRef.current.animateToRegion(
+                    {
+                      latitude: myLocation.coords.latitude,
+                      longitude: myLocation.coords.longitude,
+                      latitudeDelta: 0.005,
+                      longitudeDelta: 0.005,
+                    },
+                    500
+                  );
+
+                  Speech.stop();
+                  Speech.speak('현재 위치를 따라갑니다', { language: 'ko-KR' });
+                }}
+              >
+                <Text style={{ color: 'white', fontSize: 22, fontWeight: '800' }}>
+                  따라가기
+                </Text>
+              </TouchableOpacity>
+
+            </View>
+              ) : isRecentHistoryMode ? (
+              <View style={{ flex: 1, backgroundColor: '#000' }}>
+                <View style={styles.header}>
+                  <TouchableOpacity onPress={() => setIsRecentHistoryMode(false)}>
+                    <Ionicons name="menu" size={32} color={themeColor} />
+                  </TouchableOpacity>
+                  <Text style={styles.headerTitle}>최신 기록</Text>
+                  <View style={{ width: 32 }} />
+                </View>
+
+                <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 10 }}>
+                  {recentPlaces.length === 0 ? (
+                    <View
+                      style={{
+                        backgroundColor: '#111',
+                        borderRadius: 18,
+                        padding: 18,
+                      }}
+                    >
+                      <Text style={{ color: '#888', fontSize: 16 }}>
+                        최근 기록이 없습니다.
+                      </Text>
+                    </View>
+                  ) : (
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                      {recentPlaces.map((place, index) => (
+                        <View
+                          key={index}
+                          style={{
+                            backgroundColor: '#111',
+                            borderRadius: 18,
+                            padding: 16,
+                            marginBottom: 12,
+                          }}
+                        >
+                          <TouchableOpacity
+                            onPress={() => {
+                              setDestination(place.name);
+                              Speech.stop();
+                              Speech.speak(place.name, { language: 'ko-KR' });
+                            }}
+                          >
+                            <Text style={{ color: 'white', fontSize: 18, fontWeight: '700' }}>
+                              {place.name}
+                            </Text>
+                            <Text style={{ color: '#aaa', fontSize: 14, marginTop: 4 }}>
+                              {place.fullAddress || '주소 정보 없음'}
+                            </Text>
+                          </TouchableOpacity>
+
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              justifyContent: 'flex-end',
+                              marginTop: 12,
+                            }}
+                          >
+                            <TouchableOpacity
+                              onPress={() => {
+                                setRecentPlaces(prev =>
+                                  prev.filter(
+                                    p =>
+                                      !(
+                                        p.name === place.name &&
+                                        p.latitude === place.latitude &&
+                                        p.longitude === place.longitude
+                                      )
+                                  )
+                                );
+                                Speech.stop();
+                                Speech.speak('최신 기록에서 삭제되었습니다', {
+                                  language: 'ko-KR',
+                                });
+                              }}
+                              style={{
+                                backgroundColor: '#222',
+                                paddingVertical: 10,
+                                paddingHorizontal: 14,
+                                borderRadius: 12,
+                              }}
+                            >
+                              <Text style={{ color: 'white', fontWeight: '700' }}>삭제</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  )}
+                </View>
+              </View>
+              ) : (
+              /* 기본 화면 */
+              <View style={{ flex: 1 }}>
+                <View style={styles.header}>
+                  <TouchableOpacity onPress={() => setCurrentScreen('home')}>
+                    <Ionicons name="chevron-back" size={32} color={themeColor} />
+                  </TouchableOpacity>
+                  <Text style={styles.headerTitle}>길찾기</Text>
+                  <View style={{ width: 32 }} />
+                </View>
+
+                {/* 검색바 */}
+                <TouchableOpacity
+                  onPress={() => setIsSearchMode(true)}
+                  style={{
+                    marginHorizontal: 20,
+                    marginTop: 24,
+                    marginBottom: 14,
+                    height: 58,
+                    borderRadius: 28,
+                    backgroundColor: '#111',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 16,
+                  }}
+                >
+                  <Ionicons name="search" size={22} color="#aaa" />
+                  <Text style={{ color: '#888', fontSize: 18, marginLeft: 10 }}>
+                    네이버지도 검색처럼 목적지 찾기
+                  </Text>
+                </TouchableOpacity>
+
+                {/* 작게 지도 */}
+                <View
+                  style={{
+                    marginHorizontal: 20,
+                    marginBottom: 16,
+                    height: 180,
+                    borderRadius: 28,
+                    overflow: 'hidden',
+                    backgroundColor: '#111',
+                  }}
+                >
+                  <MapView
+                    ref={mapRef}
+                    style={StyleSheet.absoluteFillObject}
+                    showsUserLocation={true}
+                    initialRegion={{
+                      latitude: displayCoords.latitude,
+                      longitude: displayCoords.longitude,
+                      latitudeDelta: 0.005,
+                      longitudeDelta: 0.005,
+                    }}
+                  />
+                </View>
+                {/* 하단 큰 영역 = 즐겨찾기 */}
+                <View
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#111',
+                    borderTopLeftRadius: 30,
+                    borderTopRightRadius: 30,
+                    paddingTop: 24,
+                    paddingHorizontal: 20,
+                  }}
+                >
+                  <Text style={{ color: 'white', fontSize: 28, fontWeight: '800', marginBottom: 18 }}>
+                    ⭐ 즐겨찾기
+                  </Text>
+
+                  <View style={{ flex: 1 }}>
+                    {favorites.length === 0 ? (
+                      <View
+                        style={{
+                          backgroundColor: '#1A1A1A',
+                          borderRadius: 18,
+                          padding: 18,
+                          marginBottom: 18,
+                        }}
+                      >
+                        <Text style={{ color: '#888', fontSize: 16 }}>
+                          저장된 즐겨찾기가 없습니다.
+                        </Text>
+                      </View>
+                    ) : (
+                      <ScrollView showsVerticalScrollIndicator={false}>
+                        {favorites.map((place, index) => (
+                          <View
+                            key={index}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              backgroundColor: '#1A1A1A',
+                              borderRadius: 18,
+                              paddingVertical: 18,
+                              paddingHorizontal: 16,
+                              marginBottom: 12,
+                            }}
+                          >
+                            {/* 왼쪽: 즐겨찾기 해제 */}
+                            <TouchableOpacity
+                              onPress={() => {
+                                setFavorites(prev =>
+                                  prev.filter(
+                                    p =>
+                                      !(
+                                        p.name === place.name &&
+                                        p.latitude === place.latitude &&
+                                        p.longitude === place.longitude
+                                      )
+                                  )
+                                );
+                                Speech.stop();
+                                Speech.speak('즐겨찾기에서 삭제되었습니다', { language: 'ko-KR' });
+                              }}
+                              style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: 24,
+                                backgroundColor: '#222',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                marginRight: 12,
+                              }}
+                            >
+                              <Ionicons name="star" size={24} color="#D2FF00" />
+                            </TouchableOpacity>
+
+                            {/* 가운데: 장소 정보 - 누르면 바로 길찾기 */}
+                            {/* 가운데: 장소 정보 - 누르면 음성으로 확인 */}
+                            <TouchableOpacity
+                              style={{ flex: 1, marginRight: 10 }}
+                              onPress={() => {
+                                Speech.stop();
+                                Speech.speak(
+                                  `${place.name}, ${place.fullAddress || '주소 정보 없음'}. 길찾기를 시작하려면 오른쪽 길찾기 버튼을 누르세요.`,
+                                  { language: 'ko-KR' }
+                                );
+                              }}
+                            >
+                              <Text style={{ color: 'white', fontSize: 20, fontWeight: '700' }}>
+                                {place.name}
+                              </Text>
+                              <Text style={{ color: '#aaa', fontSize: 14, marginTop: 5 }}>
+                                {place.fullAddress || '주소 정보 없음'}
+                              </Text>
+                            </TouchableOpacity>
+
+                            {/* 오른쪽: 길찾기 */}
+
+                            {/* 오른쪽: 길찾기 */}
+
+                            {/* 오른쪽: 길찾기 */}
+                            <TouchableOpacity
+                              style={{
+                                backgroundColor: '#D2FF00',
+                                borderRadius: 12,
+                                paddingVertical: 10,
+                                paddingHorizontal: 12,
+                              }}
+                              onPress={async () => {
+                                const route = await getRoute(
+                                  displayCoords.latitude,
+                                  displayCoords.longitude,
+                                  place.latitude,
+                                  place.longitude
+                                );
+
+                                if (!route?.features) {
+                                  Alert.alert('경로 실패', '길찾기 결과가 없습니다.');
+                                  return;
+                                }
+
+                                const coords = route.features
+                                  .filter((item: any) => item.geometry?.type === 'LineString')
+                                  .flatMap((item: any) =>
+                                    item.geometry.coordinates.map((coord: number[]) => ({
+                                      latitude: coord[1],
+                                      longitude: coord[0],
+                                    }))
+                                  );
+
+                                const points = route.features
+                                  .filter(
+                                    (item: any) =>
+                                      item.geometry?.type === 'Point' &&
+                                      item.properties?.description
+                                  )
+                                  .map((item: any) => ({
+                                    latitude: item.geometry.coordinates[1],
+                                    longitude: item.geometry.coordinates[0],
+                                    description: item.properties.description,
+                                  }));
+
+                                setRouteCoords(coords);
+                                setGuidePoints(points);
+                                setCurrentGuideIndex(0);
+
+                                setRecentPlaces(prev => {
+                                  const updated = [
+                                    place,
+                                    ...prev.filter(
+                                      p =>
+                                        !(
+                                          p.name === place.name &&
+                                          p.latitude === place.latitude &&
+                                          p.longitude === place.longitude
+                                        )
+                                    ),
+                                  ];
+                                  return updated.slice(0, 5);
+                                });
+
+                                setIsRouteMapMode(true);
+
+                                if (coords.length > 0 && mapRef.current) {
+                                  mapRef.current.fitToCoordinates(coords, {
+                                    edgePadding: {
+                                      top: 80,
+                                      right: 50,
+                                      bottom: 80,
+                                      left: 50,
+                                    },
+                                    animated: true,
+                                  });
+                                }
+                              }}
+                            >
+                              <Text style={{ color: 'black', fontWeight: '800' }}>길찾기</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ))}
+                      </ScrollView>
+                    )}
+                  </View>
+
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: '#222',
+                      padding: 16,
+                      borderRadius: 16,
+                      alignItems: 'center',
+                      marginTop: 8,
+                      marginBottom: 24,
+                    }}
+                    onPress={() => setIsRecentHistoryMode(true)}
+                  >
+                    <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>
+                      최신 기록 보기
+                    </Text>
+                  </TouchableOpacity>
+                    </View>
+              </View>
+                  )}
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
+  );
+}
+export default function SeeQFinalApp() {
+  const [heading, setHeading] = useState(0);
+
+  // 🔥 알림 권한 요청
+  useEffect(() => {
+    const requestNotificationPermission = async () => {
+      await Notifications.requestPermissionsAsync();
+    };
+
+    requestNotificationPermission();
+  }, []);
+
+  useEffect(() => {
+    // 나침반 센서 값을 실시간으로 heading 변수에 저장합니다.
+    const subscribe = Magnetometer.addListener(data => {
+      let angle = Math.atan2(data.y, data.x) * (180 / Math.PI);
+
+      if (angle < 0) angle += 360;
+
+      setHeading(angle);
+    });
+
+    return () => subscribe.remove();
+  }, []);
+  const [currentScreen, setCurrentScreen] = useState('login');
+  const [userType, setUserType] = useState('user');
+  const [myLocation, setMyLocation] = useState<any>(null); // 내 현재 위치
+  const [targetLocation, setTargetLocation] = useState<any>(null); // (보호자용) 사용자 위치
+  const [emergencyStatus, setEmergencyStatus] = useState(false);
+  const [shareLocation, setShareLocation] = useState(false);
+  const [canGuardianViewLocation, setCanGuardianViewLocation] = useState(false);
+  const [isUpdatingShare, setIsUpdatingShare] = useState(false);
+  const [moveLogs, setMoveLogs] = useState<string[]>(["시스템 연결 대기 중..."]);
+  const [userAddress, setUserAddress] = useState('');
+  const [guardianAddress, setGuardianAddress] = useState('');
+  const [routeCoords, setRouteCoords] = useState<any[]>([]);
+  const [destination, setDestination] = useState('');
+  const [guidePoints, setGuidePoints] = useState<any[]>([]);
+  const [currentGuideIndex, setCurrentGuideIndex] = useState(0);
+  const [lastSpokenGuide, setLastSpokenGuide] = useState('');
+  const [lastSpokenIndex, setLastSpokenIndex] = useState(-1);
+  const [spokenStages, setSpokenStages] = useState<Record<number, number>>({});
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchPage, setSearchPage] = useState(1);
+  const [hasMoreResults, setHasMoreResults] = useState(true);
+  const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
+  const [favorites, setFavorites] = useState<any[]>([]);
+  const [moveStatus, setMoveStatus] = useState('정지 중');
+  const [lastUpdateTime, setLastUpdateTime] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [recognizedText, setRecognizedText] = useState('');
+
+
+  // 👇 한 줄 추가
+  ;
+
+/*
+  useSpeechRecognitionEvent("result", (event) => {
+    const text = event.results[0]?.transcript || '';
+
+    console.log("음성 결과:", text);
+
+    setRecognizedText(text);
+
+    setDestination(text);
+
+    Speech.stop();
+    Speech.speak(`${text} 검색합니다`, {
+      language: 'ko-KR',
+    });
+  });
+
+  useSpeechRecognitionEvent("end", () => {
+    setIsListening(false);
+  });
+*/
+  const startVoiceRecognition = async () => {
+  Alert.alert('안내', '음성인식은 현재 비활성화 상태입니다.');
+};
+
+
+  useEffect(() => {
+    const loadSavedPlaces = async () => {
+      try {
+        const savedFavorites = await AsyncStorage.getItem('favorites');
+        const savedRecentPlaces = await AsyncStorage.getItem('recentPlaces');
+
+        if (savedFavorites) setFavorites(JSON.parse(savedFavorites));
+        if (savedRecentPlaces) setRecentPlaces(JSON.parse(savedRecentPlaces));
+      } catch (e) {
+        console.log('저장된 장소 불러오기 실패');
+      }
+    };
+
+    loadSavedPlaces();
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem('favorites', JSON.stringify(favorites));
+  }, [favorites]);
+
+  useEffect(() => {
+  AsyncStorage.setItem(
+    'recentPlaces',
+    JSON.stringify(recentPlaces)
+  );
+}, [recentPlaces]);
+
+  const lastLoggedLocationRef = useRef<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const mapRef = useRef<MapView | null>(null);
+
+  const BRAND_COLOR = '#D2FF00';
+  const getDirectionText = (heading: number) => {
+    if (typeof heading !== 'number') return '방향 확인 중';
+    const directions = ['북', '북동', '동', '남동', '남', '남서', '서', '북서'];
+    const index = Math.round(heading / 45) % 8;
+    return directions[index];
+  };
+  const isUser = userType === 'user';
+  const themeColor = isUser ? BRAND_COLOR : '#FFFFFF';
+  /*useEffect(() => {
+    (async () => {
+      const result =
+        await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+
+      console.log('마이크 권한:', result);
+    })();
+  }, []);*/
+  useEffect(() => {
+    if (!isUser) {
+      setCanGuardianViewLocation(false);
+      setTargetLocation(null);
+      setMoveLogs(["시스템 연결 대기 중..."]);
+    }
+  }, [userType]);
+  // [추가] 나침반을 이용한 방향 감지 로직
+  useEffect(() => {
+    let subscription: any = null;
+
+    const subscribe = async () => {
+      // 폰이 향하고 있는 각도를 실시간으로 받아옴
+      subscription = Magnetometer.addListener(result => {
+        // 이 result.z 또는 result.x 값을 활용해 
+        // 사용자가 경로 방향과 다르게 서 있으면 진동이나 음성을 줄 수 있습니다.
+        // (지금은 연결 확인용 로그만 남깁니다)
+        // console.log('Compass:', result); 
+      });
+      Magnetometer.setUpdateInterval(1000); // 1초마다 업데이트
+    };
+
+    if (isUser) {
+      subscribe();
+    }
+
+    return () => {
+      if (subscription) subscription.remove();
+    };
+  }, [isUser]);
+
+  useEffect(() => {
+    if (!isUser) return;
+    if (!myLocation?.coords) return;
+    if (guidePoints.length === 0) return;
+
+    const last = guidePoints[guidePoints.length - 1];
+
+    const distance = getDistanceFromLatLonInMeters(
+      myLocation.coords.latitude,
+      myLocation.coords.longitude,
+      last.latitude,
+      last.longitude
+    );
+
+    // 목적지 10m 이내일 때 정밀 진동 (추가됨)
+    if (distance <= 10) {
+      Vibration.vibrate([0, 100, 100, 100, 100, 100]);
+    }
+    if (distance <= 20 && distance > 5) {
+      Speech.speak("목적지 근처입니다.", { language: 'ko-KR' });
+    }
+
+    if (distance <= 5) {
+      Speech.speak("목적지가 바로 앞에 있습니다.", { language: 'ko-KR' });
+    }
+  }, [myLocation]);
+
+  useEffect(() => {
+    if (!isUser) return;
+    if (!myLocation?.coords) return;
+    if (guidePoints.length === 0) return;
+    if (currentGuideIndex >= guidePoints.length) return;
+
+    const currentGuide = guidePoints[currentGuideIndex];
+
+    const distance = getDistanceFromLatLonInMeters(
+      myLocation.coords.latitude,
+      myLocation.coords.longitude,
+      currentGuide.latitude,
+      currentGuide.longitude
+    );
+
+
+
+    const stage = spokenStages[currentGuideIndex] || 0;
+
+    // 1단계: 80m 전
+    if (distance <= 80 && distance > 30 && stage < 1) {
+      Vibration.vibrate(200);
+      Speech.speak(`잠시 후 ${currentGuide.description}`, { language: 'ko-KR' });
+      setSpokenStages(prev => ({ ...prev, [currentGuideIndex]: 1 }));
+      return;
+    }
+
+    // 2단계: 30m 전
+    if (distance <= 30 && distance > 10 && stage < 2) {
+      Vibration.vibrate(200);
+      Speech.speak(`${currentGuide.description}`, { language: 'ko-KR' });
+      setSpokenStages(prev => ({ ...prev, [currentGuideIndex]: 2 }));
+      return;
+    }
+
+    // 3단계: 실행 시점
+    if (distance <= 10 && stage < 3) {
+      Vibration.vibrate([0, 200, 100, 200]);
+      Speech.speak(`지금 ${currentGuide.description}`, { language: 'ko-KR' });
+      setSpokenStages(prev => ({ ...prev, [currentGuideIndex]: 3 }));
+      setCurrentGuideIndex(prev => prev + 1);
+      return;
+    }
+  }, [myLocation, guidePoints, currentGuideIndex, isUser, spokenStages]);
+  useEffect(() => {
+    if (!isUser) return;
+    if (!myLocation?.coords) return;
+    if (routeCoords.length === 0) return;
+
+    const current = myLocation.coords;
+
+    // 경로 중 가장 가까운 점 찾기
+    let minDistance = Infinity;
+
+    routeCoords.forEach((pt) => {
+      const d = getDistanceFromLatLonInMeters(
+        current.latitude,
+        current.longitude,
+        pt.latitude,
+        pt.longitude
+      );
+      if (d < minDistance) minDistance = d;
+    });
+
+    // 30m 이상 벗어나면 이탈
+    if (minDistance > 30) {
+      Vibration.vibrate([0, 500, 200, 500]); // 진동 알림
+      // 안내 멘트를 하나로 통일하고 아래 reroute 실행
+      const reroute = async () => {
+        Speech.stop();
+        Speech.speak("경로를 벗어났습니다. 새로운 경로를 탐색합니다.", { language: 'ko-KR' });
+
+        const newRoute = await getRoute(
+          current.latitude,
+          current.longitude,
+          guidePoints[guidePoints.length - 1].latitude,
+          guidePoints[guidePoints.length - 1].longitude
+        );
+
+        if (newRoute?.features) {
+          const coords = newRoute.features
+            .filter((f: any) => f.geometry?.type === 'LineString')
+            .flatMap((f: any) =>
+              f.geometry.coordinates.map((c: number[]) => ({
+                latitude: c[1],
+                longitude: c[0],
+              }))
+            );
+
+          setRouteCoords(coords);
+          setCurrentGuideIndex(0);
+        }
+      };
+
+      reroute();
+    }
+  }, [myLocation]);
+
+
+  useEffect(() => {
+    const shareRef = ref(db, 'users/user01/shareLocation');
+
+    const offShare = onValue(shareRef, (snapshot) => {
+      setShareLocation(!!snapshot.val());
+    });
+
+    return () => offShare();
+  }, []);
+
+  const handleVoice = (msg: string) => {
+    Vibration.vibrate(20);
+    Speech.stop();
+    Speech.speak(msg, { language: 'ko' });
+  };
+  const getDistanceFromLatLonInMeters = (
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ) => {
+    const R = 6371000;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+
+  // ⭐⭐⭐ 여기 추가
+  const getAddress = async (
+    lat: number,
+    lon: number,
+    type: 'user' | 'guardian'
+  ) => {
+    try {
+      const result = await Location.reverseGeocodeAsync({
+        latitude: lat,
+        longitude: lon,
+      });
+
+      if (result.length > 0) {
+        const addr = result[0];
+
+        const parts = [addr.name, addr.street, addr.district]
+          .filter((v, i, arr) => v && arr.indexOf(v) === i);
+
+        const text =
+          parts.join(' ') ||
+          [addr.region, addr.city, addr.district]
+            .filter((v, i, arr) => v && arr.indexOf(v) === i)
+            .join(' ');
+
+        if (type === 'user') {
+          setUserAddress(text);
+        } else {
+          setGuardianAddress(text);
+        }
+
+        return text;
+      }
+
+      return '위치 정보 없음';
+    } catch (e) {
+      console.log('주소 변환 실패');
+      return '주소 변환 실패';
+    }
+  };
+  const searchPlace = async (keyword: string, page = 1) => {
+    try {
+      if (!myLocation?.coords) return [];
+
+      const originLat = myLocation.coords.latitude;
+      const originLon = myLocation.coords.longitude;
+
+      const response = await fetch(
+        `https://apis.openapi.sk.com/tmap/pois?version=1&format=json` +
+        `&searchKeyword=${encodeURIComponent(keyword)}` +
+        `&count=20` +
+        `&page=${page}` +
+        `&searchtypCd=R` +          // 거리순
+        `&radius=10` +              // 10km 반경
+        `&centerLat=${originLat}` + // 현재 위치 위도
+        `&centerLon=${originLon}` + // 현재 위치 경도
+        `&reqCoordType=WGS84GEO` +
+        `&resCoordType=WGS84GEO`,
+        {
+          method: 'GET',
+          headers: {
+            appKey: TMAP_APP_KEY,
+          },
+        }
+      );
+
+      const data = await response.json();
+      const results = data?.searchPoiInfo?.pois?.poi || [];
+
+      if (!results.length) return [];
+
+      const mapped = results
+        .map((item: any) => {
+          const latitude = parseFloat(item.noorLat || item.frontLat || item.lat);
+          const longitude = parseFloat(item.noorLon || item.frontLon || item.lon);
+
+          if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
+
+          const distance = getDistanceFromLatLonInMeters(
+            originLat,
+            originLon,
+            latitude,
+            longitude
+          );
+
+          return {
+            name: item.name,
+            bldName: item.bldName,
+            latitude,
+            longitude,
+            distance,
+            fullAddress:
+              item.newAddressList?.newAddress?.[0]?.fullAddressRoad ||
+              item.fullAddressRoad ||
+              [
+                item.roadName,
+                [item.bldNo1, item.bldNo2].filter(Boolean).join('-'),
+              ]
+                .filter(Boolean)
+                .join(' ') ||
+              [
+                item.upperAddrName,
+                item.middleAddrName,
+                item.lowerAddrName,
+                item.detailAddrName,
+              ]
+                .filter(Boolean)
+                .join(' '),
+          };
+        })
+.filter(Boolean)
+.sort((a: any, b: any) => {
+  const searchKeyword = keyword
+    .trim()
+    .replace(/\s/g, '');
+
+ const aName = (a.name || '').replace(/\s/g, '');
+const bName = (b.name || '').replace(/\s/g, '');
+
+const getScore = (name: string) => {
+  // 완전 일치
+  if (name === searchKeyword) return 0;
+
+  // 검색어로 시작
+  if (name.startsWith(searchKeyword)) return 1;
+
+  // 검색어 포함
+  if (name.includes(searchKeyword)) return 2;
+
+  // 나머지
+  return 10;
+};
+
+const scoreA = getScore(aName);
+const scoreB = getScore(bName);
+
+// 관련도 우선
+if (scoreA !== scoreB) {
+  return scoreA - scoreB;
+}
+
+// 같은 관련도면 거리순
+return a.distance - b.distance;
+});
+      return mapped;
+    } catch (e) {
+      console.log('장소 검색 실패', e);
+      return [];
+    }
+  };
+
+  // ⭐ 여기부터 붙여넣기
+  const getRoute = async (
+    startLat: number,
+    startLon: number,
+    endLat: number,
+    endLon: number
+  ) => {
+    try {
+      const response = await fetch(
+        "https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            appKey: TMAP_APP_KEY,
+          },
+          body: JSON.stringify({
+            startX: startLon,
+            startY: startLat,
+            endX: endLon,
+            endY: endLat,
+            reqCoordType: "WGS84GEO",
+            resCoordType: "WGS84GEO",
+            startName: "출발지",
+            endName: "목적지",
+          }),
+        }
+      );
+
+      const data = await response.json();
+      console.log("경로 데이터:", data);
+      return data;
+    } catch (e) {
+      console.log("경로 요청 실패", e);
+    }
+  };
+  const getDistance = (
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ) => {
+    const R = 6371e3;
+
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) *
+      Math.cos(φ2) *
+      Math.sin(Δλ / 2) *
+      Math.sin(Δλ / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+  };
+
+  // 🛰️ 위치 추적 및 실시간 데이터 연동 핵심 로직
+  useEffect(() => {
+    let watchSubscription: Location.LocationSubscription | null = null;
+    let unsubscribeLocation: (() => void) | null = null;
+    let unsubscribeStatus: (() => void) | null = null;
+
+    const pushUserLog = (placeText: string) => {
+      const time = new Date().toLocaleTimeString();
+
+      setMoveLogs(prev => {
+        const cleanPrev =
+          prev.length === 1 && prev[0].includes("시스템 연결 대기 중")
+            ? []
+            : prev.slice(0, 9);
+
+        return [
+          `[내 위치] ${time} / ${placeText}`,
+          ...cleanPrev,
+        ];
+      });
+    };
+
+
+    const pushGuardianLog = (placeText: string) => {
+      const time = new Date().toLocaleTimeString();
+
+      setMoveLogs(prev => {
+        const cleanPrev =
+          prev.length === 1 && prev[0].includes("시스템 연결 대기 중")
+            ? []
+            : prev.slice(0, 9);
+
+        return [
+          `[위치수신] ${time} / ${placeText}`,
+          ...cleanPrev,
+        ];
+      });
+    };
+
+    const startLocationTracking = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert("권한 필요", "위치 권한을 허용해야 실시간 기능이 작동합니다.");
+        return;
+      }
+
+      // 1) 처음 1번 현재 위치 바로 가져오기
+      try {
+        const current = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.BestForNavigation,
+        });
+
+        setMyLocation(current);
+
+        if (isUser) {
+          const latitude = current.coords.latitude;
+          const longitude = current.coords.longitude;
+
+
+          const placeText = await getAddress(latitude, longitude, 'user');
+          pushUserLog(placeText);
+
+          await set(ref(db, 'users/user01/location'), {
+            latitude,
+            longitude,
+            timestamp: new Date().toISOString(),
+          });
+
+          lastLoggedLocationRef.current = { latitude, longitude };
+        }
+      } catch (err) {
+        console.log("초기 위치 가져오기 실패:", err);
+      }
+
+      // 2) 이후 실시간 추적
+      watchSubscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 10000,
+          distanceInterval: 10,
+        },
+        async (location) => {
+          setMyLocation(location);
+          if (!location.coords) {
+            console.log("GPS 없음");
+            return;
+          }
+          getAddress(location.coords.latitude, location.coords.longitude, 'user');
+
+          if (isUser) {
+            const latitude = location.coords.latitude;
+            const longitude = location.coords.longitude;
+            const accuracy = location.coords.accuracy ?? 999;
+
+            // 정확도 너무 안 좋으면 무시
+            if (accuracy > 30) {
+              console.log("정확도 낮아서 무시:", accuracy);
+              return;
+            }
+
+            let shouldLog = false;
+
+            if (!lastLoggedLocationRef.current) {
+              shouldLog = true;
+            } else {
+              const distance = getDistanceFromLatLonInMeters(
+                lastLoggedLocationRef.current.latitude,
+                lastLoggedLocationRef.current.longitude,
+                latitude,
+                longitude
+              );
+
+              if (distance >= 10) {
+                shouldLog = true;
+                setMoveStatus('이동 중');
+              } else {
+                setMoveStatus('정지 중');
+              }
+            }
+
+            if (shouldLog) {
+              const addressText = await getAddress(latitude, longitude, 'user');
+              pushUserLog(addressText);
+
+              set(ref(db, 'users/user01/location'), {
+                latitude,
+                longitude,
+                timestamp: new Date().toISOString(),
+              }).catch(err => {
+                console.log("Firebase 실패");
+              });
+
+              lastLoggedLocationRef.current = { latitude, longitude };
+            }
+          }
+        }
+      );
+
+      // 3) 보호자 모드면 Firebase 실시간 수신
+      if (!isUser) {
+        const locationRef = ref(db, 'users/user01/location');
+        const shareRef = ref(db, 'users/user01/shareLocation');
+
+        let isShared = false;
+        let isEmergency = false;
+        let latestLocationData: any = null;
+
+        const updatePermission = () => {
+          const canView = isShared || isEmergency;
+          setCanGuardianViewLocation(canView);
+
+          if (!canView) {
+            setTargetLocation(null);
+            setMoveLogs(["시스템 연결 대기 중..."]); // ⭐ 추가
+          } else if (latestLocationData) {
+            setTargetLocation(latestLocationData);
+          }
+        };
+
+        const offShare = onValue(shareRef, (snapshot) => {
+          isShared = !!snapshot.val();
+          console.log("shareLocation:", isShared);
+          updatePermission();
+        });
+
+        unsubscribeLocation = onValue(locationRef, async (snapshot) => {
+          const data = snapshot.val();
+
+          if (data) {
+            latestLocationData = data;
+
+            if (isShared || isEmergency) {
+              setTargetLocation(data);
+              const addressText = await getAddress(data.latitude, data.longitude, 'guardian');
+              pushGuardianLog(addressText);
+            } else {
+              setTargetLocation(null);
+            }
+          }
+        });
+
+        const statusRef = ref(db, 'users/user01/status');
+        const offStatus = onValue(statusRef, (snapshot) => {
+          const statusData = snapshot.val();
+          isEmergency = !!statusData?.emergency;
+
+          console.log("emergency:", isEmergency);
+
+          setEmergencyStatus(isEmergency);
+          updatePermission();
+
+          if (isEmergency) {
+            Alert.alert("🚨 긴급 상황", "사용자가 도움을 요청했습니다!");
+          }
+        });
+
+        unsubscribeStatus = () => {
+          offShare();
+          offStatus();
+        };
+      }
+    };
+
+    startLocationTracking();
+
+    return () => {
+      if (watchSubscription) watchSubscription.remove();
+      if (unsubscribeLocation) unsubscribeLocation();
+      if (unsubscribeStatus) unsubscribeStatus();
+    };
+  }, [userType]);
+
+
+  // --- [화면] 동선 기록 (수정된 로직 적용) ---
+  const PathLogView = () => {
+    const displayCoords = isUser ? myLocation?.coords : targetLocation;
+
+    useEffect(() => {
+      if (!isUser && targetLocation && mapRef.current) {
+        mapRef.current.animateToRegion({
+          latitude: targetLocation.latitude,
+          longitude: targetLocation.longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        }, 1000);
+      }
+    }, [targetLocation, isUser]);
+
+    // 💡 보호자면 targetLocation(사용자)을 보여주고, 사용자면 myLocation(내 위치)을 보여줌
+    if (!isUser && !canGuardianViewLocation) {
+      return (
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => setCurrentScreen('home')}>
+              <Ionicons name="chevron-back" size={32} color={themeColor} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>사용자 위치 확인</Text>
+            <View style={{ width: 32 }} />
+          </View>
+
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+            <Text style={{ color: 'white', fontSize: 18, fontWeight: '700', textAlign: 'center' }}>
+              사용자가 위치 확인을 허용했거나 SOS 요청 중일 때만 확인할 수 있습니다.
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (!displayCoords) {
+      return <Text style={{ color: 'white', textAlign: 'center' }}>위치 정보 없음</Text>;
+    }
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setCurrentScreen('home')}><Ionicons name="chevron-back" size={32} color={themeColor} /></TouchableOpacity>
+          <Text style={styles.headerTitle}>{isUser ? "내 동선 기록" : "사용자 위치 확인"}</Text>
+          <View style={{ width: 32 }} />
+        </View>
+
+        <View style={styles.mapSection}>
+          <Text style={{ color: 'white', textAlign: 'center', marginVertical: 5 }}>
+            {isUser ? userAddress : guardianAddress}
+          </Text>
+
+          <MapView
+            ref={mapRef}
+            style={StyleSheet.absoluteFillObject}
+            showsUserLocation={isUser} // 사용자는 내 위치 표시, 보호자는 안함
+            initialRegion={displayCoords ? {
+              latitude: displayCoords.latitude,
+              longitude: displayCoords.longitude,
+              latitudeDelta: 0.005,
+              longitudeDelta: 0.005,
+            } : undefined}
+          >
+            {/* 보호자 화면에서만 보이는 사용자 마커 */}
+            {!isUser && targetLocation && (
+              <Marker
+                coordinate={{ latitude: targetLocation.latitude, longitude: targetLocation.longitude }}
+                title="사용자 현재 위치"
+              >
+                <View style={[styles.userMarker, { backgroundColor: BRAND_COLOR }]}><Ionicons name="person" size={20} color="black" /></View>
+              </Marker>
+            )}
+            {routeCoords.length > 0 && (
+              <Polyline
+                coordinates={routeCoords}
+                strokeWidth={5}
+                strokeColor="#D2FF00"
+              />
+            )}
+          </MapView>
+        </View>
+
+        <View style={styles.logSection}>
+          <Text style={[styles.logTitle, { color: themeColor }]}>{isUser ? "실시간 이동 로그" : "보호 데이터 모니터링"}</Text>
+          <ScrollView>
+            {moveLogs.map((log, i) => (
+              <View key={i} style={styles.logItem}>
+                <Text style={[styles.logTextItem, i === 0 && { color: 'white' }]}>{log}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    );
+  };
+  useEffect(() => {
+    if (
+      !myLocation?.coords ||
+      guidePoints.length === 0 ||
+      currentGuideIndex >= guidePoints.length
+    )
+      return;
+
+    const currentPoint = guidePoints[currentGuideIndex];
+
+    const distance = getDistance(
+      myLocation.coords.latitude,
+      myLocation.coords.longitude,
+      currentPoint.latitude,
+      currentPoint.longitude
+    );
+
+    // 안내 지점 근처 도착
+    if (distance < 15) {
+      Speech.stop();
+
+      Speech.speak(currentPoint.description, {
+        language: 'ko-KR',
+      });
+
+      Vibration.vibrate(500);
+
+      setCurrentGuideIndex(prev => prev + 1);
+    }
+  }, [myLocation, guidePoints, currentGuideIndex]);
+  useEffect(() => {
+    if (
+      !myLocation?.coords ||
+      routeCoords.length === 0
+    )
+      return;
+
+    const isNearRoute = routeCoords.some(point => {
+      const distance = getDistance(
+        myLocation.coords.latitude,
+        myLocation.coords.longitude,
+        point.latitude,
+        point.longitude
+      );
+
+      return distance < 30;
+    });
+
+    if (!isNearRoute) {
+      Speech.stop();
+
+      Speech.speak('경로를 이탈했습니다', {
+        language: 'ko-KR',
+      });
+
+      Vibration.vibrate([300, 300, 300]);
+    }
+  }, [myLocation]);
+  useEffect(() => {
+    if (
+      !myLocation?.coords ||
+      routeCoords.length === 0
+    )
+      return;
+
+    const lastPoint = routeCoords[routeCoords.length - 1];
+
+    const distance = getDistance(
+      myLocation.coords.latitude,
+      myLocation.coords.longitude,
+      lastPoint.latitude,
+      lastPoint.longitude
+    );
+
+    if (distance < 15) {
+      Speech.stop();
+
+      Speech.speak('목적지에 도착했습니다', {
+        language: 'ko-KR',
+      });
+
+      Vibration.vibrate([500, 200, 500]);
+    }
+  }, [myLocation]);
+  useEffect(() => {
+    const subscription = Magnetometer.addListener(data => {
+      let angle =
+        Math.atan2(data.y, data.x) * (180 / Math.PI);
+
+      angle = angle >= 0 ? angle : angle + 360;
+
+      setHeading(Math.round(angle));
+    });
+
+    Magnetometer.setUpdateInterval(1000);
+
+    return () => subscription.remove();
+  }, []);
+  // --- 나머지 화면 (LoginView, HomeView 동일 유지) ---
+  const LoginView = () => (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.inner}>
+          <View style={styles.logoContainer}>
+            <Text style={styles.logoText}>See<Text style={{ color: BRAND_COLOR }}>Q</Text>
+            </Text>
+            <Text style={styles.subText}>안전한 보행의 시작
+              </Text>
+              </View>
+          <View style={styles.typeSelector}>
+            <TouchableOpacity style={[styles.typeButton, isUser && { backgroundColor: '#222', borderColor: BRAND_COLOR, borderWidth: 1 }]} onPress={() => setUserType('user')}><Text style={[styles.typeButtonText, isUser && { color: BRAND_COLOR }]}>사용자용</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.typeButton, !isUser && { backgroundColor: '#222', borderColor: '#FFF', borderWidth: 1 }]} onPress={() => setUserType('guardian')}><Text style={[styles.typeButtonText, !isUser && { color: '#FFF' }]}>보호자용</Text></TouchableOpacity>
+          </View>
+          <View style={styles.inputContainer}>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="person" size={24} color={themeColor} />
+              <TextInput style={styles.input} placeholder="아이디" placeholderTextColor="#666" /></View>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="lock-closed" size={24} color={themeColor} /><TextInput style={styles.input} placeholder="비밀번호" placeholderTextColor="#666" secureTextEntry /></View>
+          </View>
+          <View style={styles.loginHelperContainer}>
+            <TouchableOpacity><Text style={styles.helperText}>아이디/비밀번호 찾기</Text></TouchableOpacity>
+            <Text style={styles.helperDivider}>|</Text>
+            <TouchableOpacity><Text style={styles.helperText}>회원가입</Text></TouchableOpacity>
+          </View>
+          <TouchableOpacity style={[styles.loginButton, { backgroundColor: themeColor }]} onPress={() => { handleVoice("로그인 되었습니다.  현재 위치 화면으로 이동합니다. "); setCurrentScreen('route'); }}>
+            <Text style={styles.loginButtonText}>로그인 하기
+              </Text>
+              </TouchableOpacity>
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
+  );
+
+  const HomeView = ({ favorites }: { favorites: any[] }) => (
+    <View style={styles.container}>
+      {!isUser && emergencyStatus && (
+        <TouchableOpacity
+          style={styles.emergencyBanner}
+          onPress={async () => {
+            setEmergencyStatus(false);
+            await set(ref(db, 'users/user01/status'), {
+              emergency: false,
+              timestamp: new Date().toISOString(),
+            });
+          }}
+        >
+          <Text style={styles.emergencyBannerText}>🚨 사용자 긴급 도움 요청 발생!</Text>
+        </TouchableOpacity>
+      )}
+      <View style={styles.header}>
+        <Text style={styles.logoTextSmall}>
+          See
+          <Text style={{ color: BRAND_COLOR }}>
+            Q
+            </Text>
+      </Text>
+      <TouchableOpacity onPress={() => setCurrentScreen('login')}>
+        <Ionicons name="log-out-outline" size={28} color="white" />
+      </TouchableOpacity></View>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+       <TouchableOpacity
+  style={[styles.mainCard, { backgroundColor: themeColor }]}
+  onPress={() => {
+    handleVoice("주변 인식을 시작합니다");
+    setCurrentScreen('cameraView');
+  }}
+><Ionicons name="eye" size={55} color="black" /><Text style={styles.mainCardTitle}>주변 인식 시작</Text></TouchableOpacity>
+       <View style={styles.grid}>
+  <TouchableOpacity
+    style={styles.subCard}
+    onPress={() => {
+      handleVoice("영상 기록 화면으로 이동합니다");
+      setCurrentScreen('videoList');
+    }}
+  >
+    <Ionicons name="videocam" size={30} color={themeColor} />
+    <Text style={styles.subCardTitle}>영상 기록</Text>
+  </TouchableOpacity>
+
+  <TouchableOpacity
+    style={[
+      styles.subCard,
+      !isUser && !canGuardianViewLocation && { opacity: 0.4 }
+    ]}
+    onPress={() => {
+      if (isUser) {
+        handleVoice("길찾기 화면으로 이동합니다");
+        setCurrentScreen('route');
+      } else {
+        handleVoice("동선 기록 화면으로 이동합니다");
+        setCurrentScreen('pathLog');
+      }
+    }}
+  >
+    <Ionicons
+      name={isUser ? "navigate" : "map"}
+      size={30}
+      color={themeColor}
+    />
+    <Text style={styles.subCardTitle}>
+      {isUser ? "길찾기" : "동선 기록"}
+    </Text>
+  </TouchableOpacity>
+</View>
+        {isUser && (
+          <TouchableOpacity
+  disabled={isUpdatingShare}
+  style={[
+    styles.locationShareButton,
+    shareLocation && styles.locationShareButtonOn,
+    { opacity: isUpdatingShare ? 0.6 : 1 },
+  ]}
+  onPress={async () => {
+    if (isUpdatingShare) return;
+
+    try {
+      setIsUpdatingShare(true);
+      const newValue = !shareLocation;
+      await set(ref(db, 'users/user01/shareLocation'), newValue);
+      setShareLocation(newValue);
+
+      if (newValue && myLocation?.coords) {
+        const latitude = myLocation.coords.latitude;
+        const longitude = myLocation.coords.longitude;
+
+        await set(ref(db, 'users/user01/location'), {
+          latitude,
+          longitude,
+          timestamp: new Date().toISOString(),
+        });
+
+        lastLoggedLocationRef.current = { latitude, longitude };
+      }
+    } finally {
+      setTimeout(() => setIsUpdatingShare(false), 300);
+    }
+  }}
+>
+  <View style={styles.locationShareLeft}>
+    <Ionicons
+      name={shareLocation ? 'location' : 'location-outline'}
+      size={24}
+      color={shareLocation ? '#D2FF00' : '#aaa'}
+    />
+
+    <View>
+      <Text style={styles.locationShareTitle}>
+        {shareLocation ? '위치 공유 허용 중' : '위치 공유 꺼짐'}
+      </Text>
+      <Text style={styles.locationShareDesc}>
+        {shareLocation
+          ? '보호자가 현재 위치를 확인할 수 있습니다'
+          : '버튼을 누르면 위치 공유가 시작됩니다'}
+      </Text>
+    </View>
+  </View>
+
+  <View
+    style={[
+      styles.shareStatusLight,
+      shareLocation && styles.shareStatusLightOn,
+    ]}
+  />
+</TouchableOpacity>
+        )}
+        {isUser && emergencyStatus && (
+          <TouchableOpacity
+            style={[styles.subCard, { backgroundColor: '#444', marginTop: 10 }]}
+            onPress={async () => {
+              setEmergencyStatus(false);
+              await set(ref(db, 'users/user01/status'), {
+                emergency: false,
+                timestamp: new Date().toISOString(),
+              });
+            }}
+          >
+            <Text style={{ color: 'white' }}>긴급 요청 해제</Text>
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity style={[styles.emergencyButton, !isUser && { backgroundColor: '#333' }]} onPress={
+          isUser
+            ? async () => {
+              setEmergencyStatus(true);
+              await set(ref(db, 'users/user01/status'), {
+                emergency: true,
+                timestamp: new Date().toISOString(),
+              });
+            }
+            : undefined
+        }>
+          <Ionicons name="alert-circle" size={28} color="white" /><Text style={styles.emergencyText}>{isUser ? "긴급 도움 요청" : "긴급 상황 모니터링 중"}</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
+  );
+
+  const [isHazard, setIsHazard] = useState(false);
+  const [warningMessage, setWarningMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let warningTimer: ReturnType<typeof setTimeout> | null = null;
+    let autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+    if (currentScreen === 'cameraView') {
+      warningTimer = setTimeout(async () => {
+        const message = '차량이 접근 중입니다. 멈춰주세요.';
+
+        setWarningMessage(message);
+        setIsHazard(true);
+        Vibration.vibrate([0, 500, 200, 500]);
+         // 🔥 아이폰 알림센터 푸시알림
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '위험 알림',
+        body: message,
+        sound: true,
+      },
+      trigger: null,
+    });
+
+    Speech.speak(message, {
+      language: 'ko-KR',
+      pitch: 1.0,
+      rate: 1.0,
+    });
+
+  }, 3000);
+}
+
+    return () => {
+      if (warningTimer) clearTimeout(warningTimer);
+      if (autoCloseTimer) clearTimeout(autoCloseTimer);
+    };
+  }, [currentScreen]);
+
+  return (
+    <>
+      <StatusBar barStyle="light-content" />
+      {isHazard && warningMessage && (
+        <TouchableOpacity
+          style={styles.hazardOverlay}
+          onPress={() => setIsHazard(false)}
+        >
+          <Ionicons name="warning" size={30} color="black" />
+          <Text style={styles.hazardText}>{warningMessage.replace('\n', ' ')}</Text>
+        </TouchableOpacity>
+      )}
+      {currentScreen === 'login' && <LoginView />}
+      {currentScreen === 'home' && <HomeView favorites={favorites} />}
+      {currentScreen === 'pathLog' && <PathLogView />}
+      {currentScreen === 'route' && (
+        <RouteView
+          routeCoords={routeCoords}
+          myLocation={myLocation}
+          themeColor={themeColor}
+          heading={heading}
+          userAddress={userAddress}
+          destination={destination}
+          setDestination={setDestination}
+          setCurrentScreen={setCurrentScreen}
+          getRoute={getRoute}
+          searchPlace={searchPlace}
+          setRouteCoords={setRouteCoords}
+          setGuidePoints={setGuidePoints}
+          setCurrentGuideIndex={setCurrentGuideIndex}
+          guidePoints={guidePoints}
+          currentGuideIndex={currentGuideIndex}
+          searchResults={searchResults}
+          setSearchResults={setSearchResults}
+          searchPage={searchPage}
+          setSearchPage={setSearchPage}
+          hasMoreResults={hasMoreResults}
+          setHasMoreResults={setHasMoreResults}
+          recentPlaces={recentPlaces}
+          setRecentPlaces={setRecentPlaces}
+          favorites={favorites}
+          setFavorites={setFavorites}
+          mapRef={mapRef}
+          isListening={isListening}
+          startVoiceRecognition={startVoiceRecognition}
+
+        />
+      )}
+      {currentScreen === 'cameraView' && (
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => setCurrentScreen('home')}>
+              <Ionicons name="menu" size={32} color={themeColor} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>현재 위치</Text>
+            <View style={{ width: 32 }} />
+          </View>
+
+          <View style={{ flex: 1, paddingHorizontal: 24, paddingTop: 30 }}>
+            <View
+              style={{
+                backgroundColor: '#111',
+                borderRadius: 28,
+                padding: 24,
+                alignItems: 'center',
+                marginBottom: 20,
+              }}
+            >
+              <Ionicons name="camera" size={60} color={BRAND_COLOR} />
+
+              <Text
+                style={{
+                  color: 'white',
+                  fontSize: 24,
+                  fontWeight: '800',
+                  marginTop: 16,
+                  textAlign: 'center',
+                }}
+              >
+                카메라 연결 준비 중
+              </Text>
+
+              <Text
+                style={{
+                  color: '#aaa',
+                  fontSize: 16,
+                  marginTop: 10,
+                  textAlign: 'center',
+                  lineHeight: 24,
+                }}
+              >
+                Raspberry Pi 카메라와 YOLO 객체 인식 모델을 연동해 보행 중 주변 장애물을 안내할 예정입니다.
+              </Text>
+            </View>
+
+            <View
+              style={{
+                backgroundColor: '#111',
+                borderRadius: 24,
+                padding: 20,
+                marginBottom: 14,
+              }}
+            >
+              <Text style={{ color: BRAND_COLOR, fontSize: 18, fontWeight: '800', marginBottom: 12 }}>
+                인식 예정 객체
+              </Text>
+
+              <Text style={{ color: 'white', fontSize: 17, marginBottom: 8 }}>• 사람</Text>
+              <Text style={{ color: 'white', fontSize: 17, marginBottom: 8 }}>• 차량</Text>
+              <Text style={{ color: 'white', fontSize: 17, marginBottom: 8 }}>• 장애물</Text>
+              <Text style={{ color: 'white', fontSize: 17 }}>• 횡단보도 주변 위험 요소</Text>
+            </View>
+
+            <View
+              style={{
+                backgroundColor: '#1A1A1A',
+                borderRadius: 24,
+                padding: 20,
+              }}
+            >
+              <Text style={{ color: 'white', fontSize: 18, fontWeight: '800', marginBottom: 10 }}>
+                현재 구현 상태
+              </Text>
+
+              <Text style={{ color: '#aaa', fontSize: 16, lineHeight: 24 }}>
+                현재는 GPS 기반 길찾기, 보호자 위치 공유, SOS 기능을 먼저 구현했으며,
+                카메라 부품 수령 후 YOLO 인식 결과를 이 화면에 연결할 예정입니다.
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+      {currentScreen === 'videoList' && (
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => setCurrentScreen('home')}>
+              <Ionicons name="chevron-back" size={32} color={themeColor} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>영상 기록</Text>
+            <View style={{ width: 32 }} />
+          </View>
+
+          <View style={{ flex: 1, paddingHorizontal: 24, paddingTop: 30 }}>
+            <View
+              style={{
+                backgroundColor: '#111',
+                borderRadius: 28,
+                padding: 24,
+                marginBottom: 18,
+              }}
+            >
+              <Ionicons name="videocam" size={54} color={BRAND_COLOR} />
+
+              <Text style={{ color: 'white', fontSize: 24, fontWeight: '800', marginTop: 16 }}>
+                인식 영상 기록 준비 중
+              </Text>
+
+              <Text style={{ color: '#aaa', fontSize: 16, lineHeight: 24, marginTop: 10 }}>
+                YOLO 객체 인식 결과와 위험 감지 상황을 저장해 보호자 또는 사용자가 나중에 확인할 수 있도록 구성할 예정입니다.
+              </Text>
+            </View>
+
+            <View style={{ backgroundColor: '#1A1A1A', borderRadius: 24, padding: 20 }}>
+              <Text style={{ color: BRAND_COLOR, fontSize: 18, fontWeight: '800', marginBottom: 12 }}>
+                저장 예정 정보
+              </Text>
+
+              <Text style={{ color: 'white', fontSize: 17, marginBottom: 8 }}>• 감지 시간</Text>
+              <Text style={{ color: 'white', fontSize: 17, marginBottom: 8 }}>• 감지 객체</Text>
+              <Text style={{ color: 'white', fontSize: 17, marginBottom: 8 }}>• 위험 상황 여부</Text>
+              <Text style={{ color: 'white', fontSize: 17 }}>• 보호자 확인용 기록</Text>
+            </View>
+          </View>
+        </View>
+      )}
+    </>
+  );
+}
