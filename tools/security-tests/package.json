@@ -1,0 +1,13 @@
+{
+  "name": "seeq-exhibition-security-tests",
+  "private": true,
+  "version": "1.0.0",
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.2",
+    "firebase": "12.11.0",
+    "firebase-tools": "15.34.2"
+  },
+  "scripts": {
+    "test": "node run.cjs"
+  }
+}

@@ -64,6 +64,7 @@ const firebaseConfig = {
 };
 
 const { auth, db, backendError } = createSeeqBackend(firebaseConfig);
+const storageNamespace = Platform.OS === 'web' ? `exhibition:${db.app.options.projectId}:` : '';
 const requireBackend = () => {
   if (backendError) { Alert.alert("전시용 서버 설정 필요", backendError); return false; }
   return true;
@@ -2014,6 +2015,8 @@ let createdPairCode = null;
         if (Platform.OS === 'web') { await signOut(auth); throw profileError; }
       }
 
+      if (Platform.OS === 'web') await signOut(auth);
+
       Alert.alert(
   '인증 메일 발송',
   '입력한 이메일로 인증 메일을 보냈습니다. 이메일 인증 후 로그인해주세요.',
@@ -2217,9 +2220,12 @@ return;
 
   useEffect(() => {
     if (backendError) return;
+    let authGeneration = 0;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      const session = ++authGeneration;
       if (Platform.OS === 'web' && user && !user.emailVerified) { setCurrentUser(null); return; }
-      setCurrentUser(user);
+      // Keep persistence inactive until this browser account's own data is hydrated.
+      setCurrentUser(Platform.OS === 'web' ? null : user);
 
       if (!user) {
         setFavorites([]);
@@ -2234,11 +2240,12 @@ return;
       }
 
       try {
-        const savedFavorites = await AsyncStorage.getItem(`favorites:${user.uid}`);
-        const savedRecentPlaces = await AsyncStorage.getItem(`recentPlaces:${user.uid}`);
-        const savedGuardianTargets = await AsyncStorage.getItem(`guardianTargets:${user.uid}`);
-        const savedMovementHistory = await AsyncStorage.getItem(`movementHistory:${user.uid}`);
+        const savedFavorites = await AsyncStorage.getItem(`${storageNamespace}favorites:${user.uid}`);
+        const savedRecentPlaces = await AsyncStorage.getItem(`${storageNamespace}recentPlaces:${user.uid}`);
+        const savedGuardianTargets = await AsyncStorage.getItem(`${storageNamespace}guardianTargets:${user.uid}`);
+        const savedMovementHistory = await AsyncStorage.getItem(`${storageNamespace}movementHistory:${user.uid}`);
 
+        if (Platform.OS === 'web' && session !== authGeneration) return;
         setFavorites(savedFavorites ? JSON.parse(savedFavorites) : []);
         setRecentPlaces(savedRecentPlaces ? JSON.parse(savedRecentPlaces) : []);
         setGuardianTargets(savedGuardianTargets ? JSON.parse(savedGuardianTargets) : []);
@@ -2247,8 +2254,10 @@ return;
     const profileSnapshot = await get(ref(db, `profiles/${user.uid}`));
 const profile = profileSnapshot.val();
 
+if (Platform.OS === 'web' && session !== authGeneration) return;
 console.log('🔥 profile', profile);
         if (Platform.OS === 'web' && profile && user.emailVerified) {
+          setCurrentUser(user);
           setUserType(profile.type);
           setCurrentScreen(profile.type === 'guardian' ? 'home' : 'route');
         }
@@ -2285,7 +2294,7 @@ console.log('🔥 profile', profile);
     if (!currentUser) return;
 
     AsyncStorage.setItem(
-      `favorites:${currentUser.uid}`,
+      `${storageNamespace}favorites:${currentUser.uid}`,
       JSON.stringify(favorites)
     );
   }, [favorites, currentUser]);
@@ -2294,7 +2303,7 @@ console.log('🔥 profile', profile);
     if (!currentUser) return;
 
     AsyncStorage.setItem(
-      `recentPlaces:${currentUser.uid}`,
+      `${storageNamespace}recentPlaces:${currentUser.uid}`,
       JSON.stringify(recentPlaces)
     );
   }, [recentPlaces, currentUser]);
@@ -2303,7 +2312,7 @@ console.log('🔥 profile', profile);
     if (!currentUser) return;
 
     AsyncStorage.setItem(
-      `guardianTargets:${currentUser.uid}`,
+      `${storageNamespace}guardianTargets:${currentUser.uid}`,
       JSON.stringify(guardianTargets)
     );
   }, [guardianTargets, currentUser]);
@@ -2312,7 +2321,7 @@ console.log('🔥 profile', profile);
     if (!currentUser) return;
 
     AsyncStorage.setItem(
-      `movementHistory:${currentUser.uid}`,
+      `${storageNamespace}movementHistory:${currentUser.uid}`,
       JSON.stringify(movementHistory)
     );
   }, [movementHistory, currentUser]);

@@ -80,3 +80,23 @@ EAS 환경 변수를 사용한다면 `eas env:pull --environment production`으�
 두 경로는 `C:\Users\김유민\OneDrive\바탕 화면\my-app` 아래에 있다. 각각 원본 소스와 변경 목록을 보관한다. 이번 복구는 이번 백업의 restore-web.ps1을 사용한다. Expo 종료 후 `./restore-web.ps1 -WhatIf`로 확인하고 `./restore-web.ps1 -Install`로 복원한다. 이전 지도 분리까지 되돌리려면 첫 백업 스크립트를 사용한다.
 
 공식 참고: https://docs.expo.dev/eas/hosting/ , https://docs.expo.dev/eas/environment-variables/usage/ , https://firebase.google.com/docs/projects/multiprojects , https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Autoplay
+
+## Firebase 프로젝트를 새로 만드는 순서
+
+현재 코드의 seeq-a3251은 기존 앱에서 사용하는 프로젝트다. Firebase Console에서 이 프로젝트의 설정을 바꾸지 말고, 프로젝트 추가를 눌러 seeq-exhibition 같은 새 이름으로 만든다. 새 프로젝트에서 앱 추가(웹, </>)를 누르고 앱 닉네임을 등록한다. 표시되는 firebaseConfig의 apiKey/authDomain/projectId/appId를 .env.local의 대응 항목에 넣는다. databaseURL은 Realtime Database 생성 후 표시되는 실제 URL을 복사한다. 프로젝트 이름/ID나 URL을 예시 그대로 입력하지 않는다.
+
+예전 웹에서 저장한 즐겨찾기/이동 기록을 읽지 않도록 웹 로컬 저장소 키에도 전시 프로젝트 ID를 붙였다. 회원가입 후 웹은 인증 대기 세션에서 로그아웃하며, 이메일 인증 후 다시 로그인한다.
+
+## 검증 결과와 미확인 항목
+
+TypeScript 검사, 변경한 웹 모듈 ESLint 검사, 총 32개 자동 테스트 통과. 웹 개발 HTTP 200과 정적 빌드, iOS/Android 번들 생성 확인. 실제 Safari/Chrome 기기 화면·스피커·진동, 전시 Firebase 계정의 실 가입/연결, 전시 규칙의 클라우드 검증, 실제 wss 라즈베리파이 수신은 아직 확인하지 않았다. 현재 web:preflight는 전시 Firebase 설정이 없어서 의도적으로 실패한다.
+
+Windows에서 복구 스크립트 실행 정책 메시지가 나오면 시스템 정책을 바꾸지 않고 해당 실행에만 적용한다:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\restore-web.ps1 -WhatIf
+# 실제 복구할 때:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\restore-web.ps1 -Install
+```
+
+보안 규칙 보완과 Emulator 20개 테스트 결과는 [EXHIBITION-SECURITY.md](EXHIBITION-SECURITY.md)를 확인한다. 새 웹은 32자리 초대 코드와 원자적 요청/승인 흐름을 사용한다. 기존 전시 연결 데이터는 새 규칙 적용 전에 검토해야 한다.

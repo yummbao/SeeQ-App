@@ -75,3 +75,39 @@ test('native backend still initializes original config unchanged', () => {
   assert.equal(api.createSeeqBackend(production).backendError,'');
   assert.equal(input,production);
 });
+
+test('switching visitors waits for hydration and discards a late previous-account response', async () => {
+  const source = ts.createSourceFile('index.tsx',fs.readFileSync(path.join(root,'app/(tabs)/index.tsx'),'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+  let callback;
+  function visit(node) {
+    if(ts.isCallExpression(node) && node.expression.getText(source)==='onAuthStateChanged') callback=node.arguments[1].getText(source);
+    ts.forEachChild(node,visit);
+  }
+  visit(source); assert.ok(callback);
+  const state={}; const pending=new Map();
+  const scope={
+    Platform:{OS:'web'}, auth:{},db:{},storageNamespace:'exhibition:separate:',
+    AsyncStorage:{getItem:async key=>JSON.stringify([key.split(':').at(-1)])},
+    get:key=>new Promise(resolve=>pending.set(key,resolve)),ref:(_db,key)=>key,
+    shownConnectionRequestIdsRef:{current:new Set()},console:{log(){}},
+  };
+  for(const field of ['CurrentUser','Favorites','RecentPlaces','GuardianTargets','SelectedGuardianTarget','PairedGuardianInfo','MovementHistory','MyPairCode','UserType','CurrentScreen']) scope['set'+field]=value=>{
+    if(['Favorites','RecentPlaces','GuardianTargets','MovementHistory'].includes(field)) assert.equal(state.CurrentUser,null,'persistence must remain inactive during hydration');
+    state[field]=value;
+  };
+  const mod={exports:{}};
+  const code=ts.transpileModule('module.exports = ('+callback+');',{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+  new Function('module',...Object.keys(scope),'let authGeneration = 0;\n'+code)(mod,...Object.values(scope));
+  const userA={uid:'A',emailVerified:true},userB={uid:'B',emailVerified:true};
+  const first=mod.exports(userA);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(state.CurrentUser,null);
+  const second=mod.exports(userB);
+  await new Promise(resolve=>setImmediate(resolve));
+  pending.get('profiles/B')({val:()=>({type:'guardian',pairCode:'BBBBBB'})});
+  await second;
+  assert.equal(state.CurrentUser,userB);assert.deepEqual(state.Favorites,['B']);
+  pending.get('profiles/A')({val:()=>({type:'user',pairCode:'AAAAAA'})});
+  await first;
+  assert.equal(state.CurrentUser,userB);assert.deepEqual(state.Favorites,['B']);assert.equal(state.UserType,'guardian');
+});
