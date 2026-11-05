@@ -55,13 +55,13 @@ export class HazardArbiter {
   private lastPlayedAt = -Infinity;
   private lastTimestamp: Partial<Record<HazardType, number>> = {};
 
-  accept(signal: HazardSignal, now = Date.now()): 'play' | 'refresh' | 'ignore' {
+  accept(signal: HazardSignal, now = Date.now(), outputBusy = false): 'play' | 'refresh' | 'ignore' {
     if (signal.timestamp <= (this.lastTimestamp[signal.event] ?? -Infinity)) return 'ignore';
     this.lastTimestamp[signal.event] = signal.timestamp;
     if (this.active && now < this.expiresAt &&
         HAZARD_PRIORITY[signal.event] < HAZARD_PRIORITY[this.active.event]) return 'ignore';
-    const repeating = this.active?.event === signal.event && this.active.message === signal.message &&
-      now - this.lastPlayedAt < 3000;
+    const repeating = this.active?.event === signal.event &&
+      (outputBusy || (this.active.message === signal.message && now - this.lastPlayedAt < 3000));
     this.active = signal;
     this.expiresAt = now + HAZARD_HOLD_MS[signal.event];
     if (repeating) return 'refresh';

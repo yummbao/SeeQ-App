@@ -43,7 +43,7 @@ export function HazardConnectionScreen({ controller, onBack }: { controller: Haz
           <TouchableOpacity speechLabel="저장하고 연결" accessibilityRole="button" style={styles.primary} onPress={() => { Keyboard.dismiss(); controller.connect(draft); }}>
             <Text style={styles.primaryText}>저장하고 연결</Text>
           </TouchableOpacity>
-          {!!controller.error && <Text style={styles.error} accessibilityLiveRegion="polite">{controller.error}</Text>}
+          {!!controller.error && <Text selectable style={styles.error} accessibilityLiveRegion="polite">{controller.error}</Text>}
         </View>
         <View style={styles.card}>
           <Text style={styles.heading}>경고 테스트</Text>

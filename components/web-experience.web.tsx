@@ -1,4 +1,5 @@
-import { prepareHazardAudio, playWebHazardTone } from '@/lib/web-hazard-audio';
+import { isHazardAudioActive } from '@/lib/speech-priority';
+import { prepareHazardAudio, playWebHazardTone } from '@/lib/web-hazard-audio.web';
 import { useState } from 'react';
 import { Text, View, ScrollView } from 'react-native';
 import { SpokenButton } from '@/components/spoken-button';
@@ -30,7 +31,8 @@ export function WebExperienceBar({ backendError, isDemo, hasLocation, onRequestL
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             <SpokenButton speechLabel="실제 위치 사용" onPress={onRequestLocation} style={button}><Text>실제 위치 사용</Text></SpokenButton>
             <SpokenButton speechLabel="소리 활성화" onPress={() => {
-              void prepareHazardAudio().then(() => playWebHazardTone(false)).then(() => setNotificationStatus('경고음이 활성화되었습니다. 화면을 잠그거나 다른 앱으로 전환하면 다시 활성화해야 할 수 있습니다.')).catch(error => setNotificationStatus(String(error.message)));
+              if (isHazardAudioActive()) { setNotificationStatus('위험 안내가 끝난 뒤 소리를 확인해 주세요.'); return; }
+              void prepareHazardAudio().then(() => { if (isHazardAudioActive()) return 'cancelled' as const; return playWebHazardTone(false); }).then(() => setNotificationStatus('경고음이 활성화되었습니다. 화면을 잠그거나 다른 앱으로 전환하면 다시 활성화해야 할 수 있습니다.')).catch(error => setNotificationStatus(String(error.message)));
             }} style={button}><Text>소리 활성화·경고음 확인</Text></SpokenButton>
             <SpokenButton speechLabel="음성 확인" onPress={() => AppSpeech.speak('SeeQ 웹 음성 안내입니다.')} style={button}><Text>음성 확인</Text></SpokenButton>
             <SpokenButton speechLabel="위험 감지 연결 및 테스트" onPress={onHazardSettings} style={button}><Text>위험 감지 연결·테스트</Text></SpokenButton>

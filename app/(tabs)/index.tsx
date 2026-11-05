@@ -1,17 +1,21 @@
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from '@/lib/platform/location';
 import * as Notifications from '@/lib/platform/notifications';
 import { Magnetometer } from '@/lib/platform/sensors';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 //import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import { HazardConnectionScreen } from '@/components/hazard-connection-screen';
+import MapView, { Marker, Polyline } from '@/components/maps/seeq-map';
 import { SpokenButton as TouchableOpacity } from '@/components/spoken-button';
+import { WebExperienceBar, WebLocationGate } from '@/components/web-experience';
 import { useHazardAlerts } from '@/hooks/use-hazard-alerts';
 import { AppAlert as Alert } from '@/lib/app-alert';
 import { AppSpeech as Speech } from '@/lib/app-speech';
-import { HAZARD_LABEL } from '@/lib/hazard-protocol';
-import { isHazardAudioActive } from '@/lib/speech-priority';
 import { createSeeqBackend } from '@/lib/backend';
+import { HAZARD_LABEL } from '@/lib/hazard-protocol';
+import { Vibration } from '@/lib/platform/vibration';
+import { isHazardAudioActive } from '@/lib/speech-priority';
+import { WEB_DEMO_ORIGIN } from '@/lib/web-demo-location';
 import {
   createUserWithEmailAndPassword,
 
@@ -38,10 +42,6 @@ import {
   TouchableWithoutFeedback,
   View
 } from 'react-native';
-import MapView, { Marker, Polyline } from '@/components/maps/seeq-map';
-import { Vibration } from '@/lib/platform/vibration';
-import { WebExperienceBar, WebLocationGate } from '@/components/web-experience';
-import { WEB_DEMO_ORIGIN } from '@/lib/web-demo-location';
 
 
 Notifications.setNotificationHandler({

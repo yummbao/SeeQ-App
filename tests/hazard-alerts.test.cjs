@@ -69,11 +69,12 @@ test('duplicate/out-of-order packets do not replay; expired alerts allow new eve
   assert.equal(gate.accept(signal('GO', 104), 104000), 'play');
 });
 
-function fixture() {
+function fixture(timeSync = false) {
   const sockets = [], states = [], errors = [], received = [], timers = new Map();
   let nextId = 0, disconnections = 0;
   class FakeSocket {
-    constructor(url) { this.url = url; this.closed = false; sockets.push(this); }
+    constructor(url) { this.url = url; this.closed = false; this.readyState = 1; this.sent = []; sockets.push(this); }
+    send(data) { this.sent.push(JSON.parse(data)); }
     close() { this.closed = true; }
   }
   const dependencies = {
@@ -82,7 +83,7 @@ function fixture() {
     clearTimeout: id => timers.delete(id),
   };
   const close = openHazardSocket({
-    endpoint: 'ws://192.168.0.20:5000', onStatus: value => states.push(value), onError: value => errors.push(value),
+    timeSync, endpoint: 'ws://192.168.0.20:5000', onStatus: value => states.push(value), onError: value => errors.push(value),
     onSignal: value => received.push(value), onDisconnect: () => disconnections++,
   }, dependencies);
   const tick = delay => {
@@ -132,4 +133,78 @@ test('retry backoff grows for unsuccessful attempts', () => {
   f.sockets[2].onerror();
   assert.ok([...f.timers.values()].some(t => t.delay === 4000));
   f.close();
+});
+
+test('TIME_SYNC opt-in sends Unix seconds immediately and every minute, then stops on disposal', () => {
+  const f = fixture(true);
+  try {
+    const ws = f.sockets[0];
+    assert.equal(ws.sent.length, 0);
+    const before = Date.now() / 1000;
+    ws.onopen();
+    assert.equal(ws.sent[0].event, 'TIME_SYNC');
+    assert.ok(ws.sent[0].timestamp >= before && ws.sent[0].timestamp <= Date.now() / 1000);
+    assert.deepEqual(Object.keys(ws.sent[0]).sort(), ['event', 'timestamp']);
+    f.tick(60000);
+    assert.equal(ws.sent.length, 2);
+    assert.equal([...f.timers.values()].filter(t => t.delay === 60000).length, 1);
+    const late = [...f.timers.values()].find(t => t.delay === 60000).callback;
+    f.close();
+    late();
+    assert.equal(ws.sent.length, 2);
+    assert.equal(f.timers.size, 0);
+  } finally { f.close(); }
+});
+
+test('default socket callers do not enable time sync or alter web behavior', () => {
+  const f = fixture();
+  try {
+    f.sockets[0].onopen();
+    assert.equal(f.sockets[0].sent.length, 0);
+    assert.equal(f.timers.size, 0);
+  } finally { f.close(); }
+});
+
+test('TIME_SYNC timer is cleared on disconnect and re-created for the new connection', () => {
+  const f = fixture(true);
+  try {
+    const first = f.sockets[0]; first.onopen();
+    const late = [...f.timers.values()].find(t => t.delay === 60000).callback;
+    first.onclose({ code: 1000, reason: 'test disconnect', wasClean: true });
+    assert.ok(![...f.timers.values()].some(t => t.delay === 60000));
+    late();
+    assert.equal(first.sent.length, 1);
+    f.tick(1000);
+    const next = f.sockets[1]; next.onopen();
+    assert.equal(next.sent.length, 1);
+    f.tick(60000);
+    assert.equal(first.sent.length, 1);
+    assert.equal(next.sent.length, 2);
+  } finally { f.close(); }
+});
+
+test('TIME_SYNC send failure reconnects without claiming connection success', () => {
+  const f = fixture(true);
+  try {
+    f.sockets[0].send = () => { throw Error('sync transport failed'); };
+    f.sockets[0].onopen();
+    assert.equal(f.states.at(-1), '재연결 대기');
+    assert.ok(!f.states.includes('연결됨'));
+    assert.ok(![...f.timers.values()].some(t => t.delay === 60000));
+    f.tick(1000);
+    f.sockets[1].onopen();
+    assert.equal(f.sockets[1].sent[0].event, 'TIME_SYNC');
+  } finally { f.close(); }
+});
+
+test('TIME_SYNC never relabels stale packets as fresh or extends the ten-second limit', () => {
+  const f = fixture(true);
+  try {
+    const ws = f.sockets[0]; ws.onopen();
+    ws.onmessage({ data: JSON.stringify(signal('LEVEL1', Date.now() / 1000 - 7181)) });
+    assert.equal(f.received.length, 0);
+    ws.onmessage({ data: JSON.stringify(signal('LEVEL2')) });
+    assert.equal(f.received.length, 1);
+    assert.equal(f.received[0].event, 'LEVEL2');
+  } finally { f.close(); }
 });
